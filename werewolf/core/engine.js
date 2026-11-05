@@ -163,7 +163,8 @@
         out.push({
           actionId: aid,
           targets: targets,
-          required: a.required !== false,
+          // 選べる対象が無いときは必須にしない（進行が止まらないように）
+          required: a.required !== false && (targets.length > 0 || !!a.allowNoTarget),
           chosen: chosen === undefined ? null : chosen,
         });
       });

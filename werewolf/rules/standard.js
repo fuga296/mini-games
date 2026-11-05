@@ -288,7 +288,7 @@
             if (rule === 'random') { chosen = ctx.pick(t.top); ctx.emit('voteTieRandom', { candidates: t.top, chosen: chosen }, 'all'); }
           }
           if (chosen) {
-            kill(ctx, ctx.player(chosen), 'execution', 'all');
+            kill(ctx, ctx.player(chosen), 'execution', 'gm');
             ctx.state.extra.lastExecuted = chosen;
             ctx.emit('executed', { playerId: chosen }, 'all');
           } else {
