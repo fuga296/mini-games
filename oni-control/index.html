@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>鬼操作力ゲーム</title>
+<style>
+  :root {
+    --bg: #14161c; --panel: #1f232c; --line: #3a4150; --text: #e8ebf1; --sub: #9aa3b5;
+    --accent: #ffcc33; --goal: #3ddc84; --spike: #ff4d5e; --wall: #59627a; --ball: #ffffff;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  body { overflow: hidden; user-select: none; -webkit-user-select: none; }
+  button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+  button:active { filter: brightness(1.3); }
+  button.primary { background: var(--accent); color: #222; border-color: var(--accent); font-weight: 700; }
+  .screen { position: fixed; inset: 0; display: none; flex-direction: column; }
+  .screen.on { display: flex; }
+
+  /* メニュー */
+  #menu, #settings { overflow-y: auto; touch-action: pan-y; padding: 16px; align-items: center; }
+  .wrap { width: 100%; max-width: 520px; }
+  h1 { margin: 8px 0 4px; font-size: 28px; letter-spacing: .05em; }
+  h1 span { color: var(--accent); }
+  .lead { color: var(--sub); margin: 0 0 16px; font-size: 14px; line-height: 1.6; }
+  .stage-btn { display: flex; width: 100%; text-align: left; align-items: center; gap: 12px; margin-bottom: 10px; padding: 12px 14px; }
+  .stage-btn .no { font-size: 22px; font-weight: 800; color: var(--accent); width: 28px; text-align: center; }
+  .stage-btn .body { flex: 1; }
+  .stage-btn .name { font-weight: 700; }
+  .stage-btn .desc { color: var(--sub); font-size: 12px; margin-top: 2px; }
+  .stage-btn .best { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--goal); white-space: nowrap; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .note { color: var(--sub); font-size: 12px; line-height: 1.6; margin-top: 14px; }
+
+  /* 設定 */
+  .set-stage { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .set-stage h3 { margin: 0 0 6px; font-size: 15px; }
+  .set-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 13px; }
+  .set-item input { width: 90px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; text-align: right; }
+  .set-item small { color: var(--sub); display: block; }
+
+  /* ゲーム */
+  #game { align-items: center; touch-action: none; }
+  #hud { width: 100%; max-width: 520px; display: flex; align-items: center; gap: 8px; padding: 8px 10px 4px; }
+  #hud .title { flex: 1; min-width: 0; }
+  #hud .title b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #hud .title small { color: var(--sub); font-size: 11px; display: block; line-height: 1.4; }
+  #timer { font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 700; color: var(--accent); min-width: 80px; text-align: right; }
+  #hud button { padding: 6px 10px; font-size: 13px; }
+  #stageArea { flex: 1; width: 100%; display: flex; align-items: center; justify-content: center; min-height: 0; padding: 4px; }
+  canvas { display: block; background: #0d0f14; border: 1px solid var(--line); border-radius: 8px; }
+  #pad { display: none; width: 100%; max-width: 520px; padding: 6px 12px calc(10px + env(safe-area-inset-bottom)); }
+  body.touch #pad { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 8px; height: 150px; }
+  .pbtn { display: flex; align-items: center; justify-content: center; font-size: 24px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 14px; touch-action: none; }
+  .pbtn.down { background: var(--accent); color: #222; }
+  #keyhint { color: var(--sub); font-size: 11px; padding: 0 10px 8px; text-align: center; }
+  body.touch #keyhint { display: none; }
+
+  /* オーバーレイ */
+  #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; padding: 16px; }
+  #overlay.on { display: flex; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; width: 100%; max-width: 360px; text-align: center; }
+  .card h2 { margin: 0 0 6px; }
+  .card .big { font-size: 34px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .card p { color: var(--sub); font-size: 13px; line-height: 1.6; margin: 8px 0; }
+  .card .row { justify-content: center; }
+</style>
+</head>
+<body>
+
+<!-- ===== メニュー ===== -->
+<section id="menu" class="screen on">
+  <div class="wrap">
+    <h1>鬼<span>操作</span>力ゲーム</h1>
+    <p class="lead">玉をゴール(緑の円)まで運ぶだけ。<br>ただし、ステージごとに操作方法がおかしくなります。赤いトゲに触れるとスタートに戻されます。</p>
+    <div id="stageList"></div>
+    <div class="row">
+      <button id="btnSettings">⚙ 設定</button>
+      <button id="btnResetRec">記録を消す</button>
+    </div>
+    <p class="note" id="menuNote"></p>
+  </div>
+</section>
+
+<!-- ===== 設定 ===== -->
+<section id="settings" class="screen">
+  <div class="wrap">
+    <h1>設定</h1>
+    <p class="lead">各ステージの数値を変えられます。既定値から変えている間は、クリアタイムを記録しません(公平のため)。</p>
+    <div id="settingList"></div>
+    <div class="row">
+      <button class="primary" id="btnSetBack">保存して戻る</button>
+      <button id="btnSetDefault">すべて既定値に戻す</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ゲーム ===== -->
+<section id="game" class="screen">
+  <div id="hud">
+    <button id="btnMenu" aria-label="メニュー">≡</button>
+    <div class="title"><b id="stName"></b><small id="stHint"></small></div>
+    <div id="timer">0.00</div>
+    <button id="btnRetry" aria-label="やり直し">↺</button>
+  </div>
+  <div id="stageArea"><canvas id="cv"></canvas></div>
+  <div id="keyhint">移動: ←↑↓→ / WASD ・ やり直し: R ・ メニュー: Esc</div>
+  <div id="pad">
+    <div></div><div class="pbtn" data-k="U">▲</div><div></div>
+    <div class="pbtn" data-k="L">◀</div><div class="pbtn" data-k="D">▼</div><div class="pbtn" data-k="R">▶</div>
+  </div>
+</section>
+
+<div id="overlay"><div class="card" id="card"></div></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   設定(既定値)。数値はここで変えるか、ゲーム内の「設定」画面で変更できる。
+   ===================================================================== */
+const CONFIG = {
+  world: { w: 400, h: 600 },       // 論理座標の盤面サイズ(縦長: スマホ縦持ち想定)
+  ballRadius: 12,
+  restitution: 0.45,               // 壁で跳ね返るときの反発係数
+  goalRadius: 26,
+};
+
+// 設定画面に出す項目の説明
+const PARAM_LABELS = {
+  speed:      ['速さ', '入力1あたりの速度 (px/秒)'],
+  accel:      ['加速度', '入力1あたりの加速度 (px/秒²)'],
+  jerk:       ['躍度', '入力1あたりの加速度の変化率 (px/秒³)'],
+  maxSpeed:   ['最高速度', 'px/秒'],
+  maxAccel:   ['最大加速度', 'px/秒²'],
+  friction:   ['摩擦', '1秒あたりの減速率 (0で永久に滑る)'],
+  accelDecay: ['加速度の減衰', '1秒あたり (0で保持)'],
+  delay:      ['入力遅延', 'ミリ秒'],
+  rotSpeed:   ['入力の回転速度', '度/秒'],
+};
+
+/* 操作方式 mode:
+     velocity … 入力 = 速度
+     accel    … 入力 = 加速度(慣性あり)
+     jerk     … 入力 = 躍度(加速度の変化)
+   変換:
+     keymap   … 物理キー(U/D/L/R) → 論理方向 の付け替え
+     delay    … 入力が届くまでの遅延
+     rotSpeed … 入力方向が時間とともに回転
+*/
+const STAGES = [
+  {
+    name: 'あべこべ',
+    desc: '方向キーが全部ずれている',
+    hint: '↑で右、→で下、↓で左、←で上へ動く',
+    ctrl: { mode: 'velocity', speed: 150 },
+    keymap: { U: [1, 0], R: [0, 1], D: [-1, 0], L: [0, -1] },
+    start: [60, 540], goal: [340, 70],
+    walls: [[0, 380, 280, 20], [120, 210, 280, 20]],
+    spikes: [[270, 470, 130, 20], [0, 300, 60, 20]],
+  },
+  {
+    name: '氷の上',
+    desc: '入力は加速度。止まれない',
+    hint: '押すと加速するだけ。止まるには逆に押す',
+    ctrl: { mode: 'accel', accel: 220, maxSpeed: 320, friction: 0.25 },
+    start: [60, 540], goal: [340, 540],
+    walls: [[190, 160, 20, 440]],
+    spikes: [[160, 0, 80, 40], [0, 250, 40, 60], [360, 250, 40, 60]],
+  },
+  {
+    name: '遅れて届く',
+    desc: '入力が少し遅れて届く',
+    hint: '操作は約0.7秒後に反映される',
+    ctrl: { mode: 'velocity', speed: 160, delay: 700 },
+    start: [60, 560], goal: [60, 60],
+    walls: [[0, 450, 290, 20], [110, 310, 290, 20], [0, 170, 290, 20]],
+    spikes: [[370, 380, 30, 30], [0, 240, 30, 30], [370, 100, 30, 30]],
+  },
+  {
+    name: '回る世界',
+    desc: '入力の向きがぐるぐる回る',
+    hint: '左上の矢印が「↑キーで進む向き」。それが回り続ける',
+    ctrl: { mode: 'velocity', speed: 150, rotSpeed: 45 },
+    start: [200, 550], goal: [200, 60],
+    walls: [],
+    spikes: [[0, 400, 140, 24], [260, 400, 140, 24], [90, 250, 220, 24], [0, 130, 130, 24], [270, 130, 130, 24]],
+  },
+  {
+    name: '躍度',
+    desc: '入力は加速度の「変化」',
+    hint: '押すと加速度が増える。離しても加速度は残る',
+    ctrl: { mode: 'jerk', jerk: 400, maxAccel: 260, maxSpeed: 300, friction: 0.4, accelDecay: 0 },
+    start: [60, 540], goal: [330, 110],
+    walls: [[0, 320, 240, 20]],
+    spikes: [[300, 320, 100, 20]],
+  },
+];
+const DEFAULT_CTRL = STAGES.map(s => JSON.parse(JSON.stringify(s.ctrl)));
+
+/* =====================================================================
+   保存(ブラウザ内の localStorage のみ。外部通信なし)
+   ===================================================================== */
+const LS_REC = 'oniControl.records.v1';
+const LS_SET = 'oniControl.settings.v1';
+function lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+let records = lsGet(LS_REC, {});          // { stageIndex: bestMs }
+(function loadSettings() {
+  const saved = lsGet(LS_SET, null);
+  if (!saved) return;
+  STAGES.forEach((s, i) => {
+    if (!saved[i]) return;
+    for (const k in s.ctrl) if (typeof s.ctrl[k] === 'number' && typeof saved[i][k] === 'number') s.ctrl[k] = saved[i][k];
+  });
+})();
+function isModified() {
+  return STAGES.some((s, i) => Object.keys(s.ctrl).some(k => s.ctrl[k] !== DEFAULT_CTRL[i][k]));
+}
+
+/* =====================================================================
+   画面
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+function show(id) { document.querySelectorAll('.screen').forEach(e => e.classList.toggle('on', e.id === id)); }
+function fmt(ms) { return (ms / 1000).toFixed(2); }
+
+function renderMenu() {
+  const list = $('stageList'); list.innerHTML = '';
+  STAGES.forEach((s, i) => {
+    const b = document.createElement('button'); b.className = 'stage-btn';
+    const best = records[i] != null ? '🏁 ' + fmt(records[i]) + '秒' : '—';
+    b.innerHTML = `<div class="no">${i + 1}</div><div class="body"><div class="name">${s.name}</div><div class="desc">${s.desc}</div></div><div class="best">${best}</div>`;
+    b.onclick = () => startStage(i);
+    list.appendChild(b);
+  });
+  $('menuNote').textContent = isModified()
+    ? '※ 設定を既定値から変えているため、いまはクリアタイムを記録しません。'
+    : 'クリアタイムはこの端末のブラウザ内にだけ保存されます。';
+  show('menu');
+}
+
+function renderSettings() {
+  const box = $('settingList'); box.innerHTML = '';
+  STAGES.forEach((s, i) => {
+    const d = document.createElement('div'); d.className = 'set-stage';
+    d.innerHTML = `<h3>${i + 1}. ${s.name}</h3>`;
+    for (const k in s.ctrl) {
+      if (typeof s.ctrl[k] !== 'number') continue;
+      const [lab, unit] = PARAM_LABELS[k] || [k, ''];
+      const row = document.createElement('label'); row.className = 'set-item';
+      row.innerHTML = `<span>${lab}<small>${unit}・既定 ${DEFAULT_CTRL[i][k]}</small></span>`;
+      const inp = document.createElement('input'); inp.type = 'number'; inp.step = 'any'; inp.value = s.ctrl[k];
+      inp.dataset.stage = i; inp.dataset.key = k;
+      row.appendChild(inp); d.appendChild(row);
+    }
+    box.appendChild(d);
+  });
+  show('settings');
+}
+$('btnSettings').onclick = renderSettings;
+$('btnSetBack').onclick = () => {
+  document.querySelectorAll('#settingList input').forEach(inp => {
+    const v = parseFloat(inp.value);
+    if (isFinite(v) && v >= 0) STAGES[inp.dataset.stage].ctrl[inp.dataset.key] = v;
+  });
+  lsSet(LS_SET, STAGES.map(s => s.ctrl));
+  renderMenu();
+};
+$('btnSetDefault').onclick = () => {
+  STAGES.forEach((s, i) => { s.ctrl = JSON.parse(JSON.stringify(DEFAULT_CTRL[i])); });
+  lsSet(LS_SET, null);
+  renderSettings();
+};
+$('btnResetRec').onclick = () => {
+  if (confirm('すべてのクリアタイムを消しますか?')) { records = {}; lsSet(LS_REC, records); renderMenu(); }
+};
+
+/* =====================================================================
+   入力(物理方向 U/D/L/R として扱い、ステージ側で意味を付け替える)
+   ===================================================================== */
+const held = { U: false, D: false, L: false, R: false };
+const KEYS = { ArrowUp: 'U', KeyW: 'U', ArrowDown: 'D', KeyS: 'D', ArrowLeft: 'L', KeyA: 'L', ArrowRight: 'R', KeyD: 'R' };
+const PHYS_VEC = { U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0] };
+window.addEventListener('keydown', e => {
+  if (KEYS[e.code]) { held[KEYS[e.code]] = true; e.preventDefault(); }
+  if (!$('game').classList.contains('on')) return;
+  if (e.code === 'KeyR' || e.code === 'Space') { e.preventDefault(); startStage(game.idx); }
+  if (e.code === 'Escape') { stopGame(); renderMenu(); }
+  if (e.code === 'Enter' && game.cleared) { e.preventDefault(); nextStage(); }
+});
+window.addEventListener('keyup', e => { if (KEYS[e.code]) held[KEYS[e.code]] = false; });
+window.addEventListener('blur', () => { for (const k in held) held[k] = false; });
+
+// スマホ用パッド(マルチタッチ対応、指を滑らせても判定)
+const touchOwner = new Map(); // pointerId -> key
+function padKeyAt(x, y) { const el = document.elementFromPoint(x, y); return el && el.classList.contains('pbtn') ? el.dataset.k : null; }
+function refreshPad() {
+  for (const k in held) if (['U', 'D', 'L', 'R'].includes(k)) held[k] = false;
+  for (const k of touchOwner.values()) if (k) held[k] = true;
+  document.querySelectorAll('.pbtn').forEach(b => b.classList.toggle('down', held[b.dataset.k]));
+}
+const pad = $('pad');
+pad.addEventListener('pointerdown', e => { e.preventDefault(); try { pad.setPointerCapture(e.pointerId); } catch (_) {} touchOwner.set(e.pointerId, padKeyAt(e.clientX, e.clientY)); refreshPad(); });
+pad.addEventListener('pointermove', e => { if (touchOwner.has(e.pointerId)) { touchOwner.set(e.pointerId, padKeyAt(e.clientX, e.clientY)); refreshPad(); } });
+['pointerup', 'pointercancel'].forEach(t => pad.addEventListener(t, e => { touchOwner.delete(e.pointerId); refreshPad(); }));
+if (window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) document.body.classList.add('touch');
+window.addEventListener('touchstart', () => { if (!document.body.classList.contains('touch')) { document.body.classList.add('touch'); resize(); } }, { once: true, passive: true });
+
+/* =====================================================================
+   ゲーム本体
+   ===================================================================== */
+const cv = $('cv'), ctx = cv.getContext('2d');
+let scale = 1;
+const game = { idx: 0, running: false, raf: 0 };
+
+function resize() {
+  const area = $('stageArea').getBoundingClientRect();
+  const W = CONFIG.world.w, H = CONFIG.world.h;
+  scale = Math.max(0.1, Math.min((area.width - 8) / W, (area.height - 8) / H));
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = W * scale + 'px'; cv.style.height = H * scale + 'px';
+  cv.width = Math.round(W * scale * dpr); cv.height = Math.round(H * scale * dpr);
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+}
+window.addEventListener('resize', () => { if (game.running) resize(); });
+
+function startStage(i) {
+  stopGame();
+  const s = STAGES[i];
+  Object.assign(game, {
+    idx: i, s, c: s.ctrl, running: true, cleared: false,
+    x: s.start[0], y: s.start[1], vx: 0, vy: 0, ax: 0, ay: 0,
+    t: 0, timerOn: false, elapsed: 0, angle: 0, buf: [], delayed: [0, 0], trail: [], deaths: 0, flash: 0,
+  });
+  $('stName').textContent = `STAGE ${i + 1}: ${s.name}`;
+  $('stHint').textContent = s.hint;
+  $('overlay').classList.remove('on');
+  show('game'); resize();
+  let last = performance.now();
+  const loop = now => {
+    if (!game.running) return;
+    let dt = Math.min(0.05, (now - last) / 1000); last = now;
+    const steps = 4;
+    for (let k = 0; k < steps; k++) update(dt / steps);
+    draw();
+    game.raf = requestAnimationFrame(loop);
+  };
+  game.raf = requestAnimationFrame(loop);
+}
+function stopGame() { game.running = false; cancelAnimationFrame(game.raf); }
+
+// 物理キー → 論理入力ベクトル
+function rawInput() {
+  const s = game.s; let x = 0, y = 0;
+  for (const k of ['U', 'D', 'L', 'R']) if (held[k]) {
+    const v = (s.keymap && s.keymap[k]) || PHYS_VEC[k]; x += v[0]; y += v[1];
+  }
+  const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
+  return [x, y];
+}
+
+function update(dt) {
+  const g = game, c = g.c;
+  if (g.cleared) return;
+  g.t += dt;
+  let [ix, iy] = rawInput();
+  if (!g.timerOn && (ix || iy)) g.timerOn = true;
+  if (g.timerOn) g.elapsed += dt * 1000;
+
+  // 回転: 入力方向を時間とともに回す
+  if (c.rotSpeed) {
+    g.angle = (g.t * c.rotSpeed) * Math.PI / 180;
+    const cs = Math.cos(g.angle), sn = Math.sin(g.angle);
+    [ix, iy] = [ix * cs - iy * sn, ix * sn + iy * cs];
+  }
+  // 遅延: 入力を記録し、delay ミリ秒前の値を使う
+  if (c.delay) {
+    g.buf.push([g.t, ix, iy]);
+    const tgt = g.t - c.delay / 1000;
+    while (g.buf.length && g.buf[0][0] <= tgt) { g.delayed = [g.buf[0][1], g.buf[0][2]]; g.buf.shift(); }
+    [ix, iy] = g.delayed;
+  }
+  g.inX = ix; g.inY = iy;
+
+  if (c.mode === 'velocity') {
+    g.vx = ix * c.speed; g.vy = iy * c.speed;
+  } else if (c.mode === 'accel') {
+    g.ax = ix * c.accel; g.ay = iy * c.accel;
+    g.vx += g.ax * dt; g.vy += g.ay * dt;
+  } else if (c.mode === 'jerk') {
+    g.ax += ix * c.jerk * dt; g.ay += iy * c.jerk * dt;
+    if (c.accelDecay) { const f = Math.exp(-c.accelDecay * dt); g.ax *= f; g.ay *= f; }
+    const am = Math.hypot(g.ax, g.ay); if (am > c.maxAccel) { g.ax *= c.maxAccel / am; g.ay *= c.maxAccel / am; }
+    g.vx += g.ax * dt; g.vy += g.ay * dt;
+  }
+  if (c.mode !== 'velocity') {
+    const f = Math.exp(-(c.friction || 0) * dt); g.vx *= f; g.vy *= f;
+    const vm = Math.hypot(g.vx, g.vy); if (c.maxSpeed && vm > c.maxSpeed) { g.vx *= c.maxSpeed / vm; g.vy *= c.maxSpeed / vm; }
+  }
+  g.x += g.vx * dt; g.y += g.vy * dt;
+  collide();
+
+  // トゲ
+  const r = CONFIG.ballRadius;
+  for (const sp of g.s.spikes) if (circleRect(g.x, g.y, r * 0.85, sp)) { respawn(); return; }
+  // ゴール
+  const gd = Math.hypot(g.x - g.s.goal[0], g.y - g.s.goal[1]);
+  if (gd < CONFIG.goalRadius - r * 0.3) clear();
+}
+
+function circleRect(cx, cy, r, [x, y, w, h]) {
+  const nx = Math.max(x, Math.min(cx, x + w)), ny = Math.max(y, Math.min(cy, y + h));
+  return (cx - nx) ** 2 + (cy - ny) ** 2 < r * r;
+}
+
+function collide() {
+  const g = game, r = CONFIG.ballRadius, e = CONFIG.restitution, W = CONFIG.world.w, H = CONFIG.world.h;
+  if (g.x < r) { g.x = r; g.vx = Math.abs(g.vx) * e; }
+  if (g.x > W - r) { g.x = W - r; g.vx = -Math.abs(g.vx) * e; }
+  if (g.y < r) { g.y = r; g.vy = Math.abs(g.vy) * e; }
+  if (g.y > H - r) { g.y = H - r; g.vy = -Math.abs(g.vy) * e; }
+  for (const [x, y, w, h] of g.s.walls) {
+    const nx = Math.max(x, Math.min(g.x, x + w)), ny = Math.max(y, Math.min(g.y, y + h));
+    let dx = g.x - nx, dy = g.y - ny; const d2 = dx * dx + dy * dy;
+    if (d2 >= r * r) continue;
+    let d = Math.sqrt(d2);
+    if (d === 0) { // 中心がめり込んだ: 最短の辺へ押し出す
+      const opts = [[g.x - x, -1, 0], [x + w - g.x, 1, 0], [g.y - y, 0, -1], [y + h - g.y, 0, 1]].sort((a, b) => a[0] - b[0]);
+      dx = opts[0][1]; dy = opts[0][2]; d = 1; g.x = nx; g.y = ny;
+    }
+    const ux = dx / d, uy = dy / d;
+    g.x = nx + ux * r; g.y = ny + uy * r;
+    const vn = g.vx * ux + g.vy * uy;
+    if (vn < 0) { g.vx -= (1 + e) * vn * ux; g.vy -= (1 + e) * vn * uy; }
+  }
+}
+
+function respawn() {
+  const g = game;
+  g.x = g.s.start[0]; g.y = g.s.start[1]; g.vx = g.vy = g.ax = g.ay = 0;
+  g.buf = []; g.delayed = [0, 0]; g.deaths++; g.flash = 1; g.trail = [];
+}
+
+function clear() {
+  const g = game; g.cleared = true;
+  const ms = Math.round(g.elapsed);
+  const modified = isModified();
+  const prev = records[g.idx];
+  let isBest = false;
+  if (!modified && (prev == null || ms < prev)) { records[g.idx] = ms; lsSet(LS_REC, records); isBest = true; }
+  const last = g.idx === STAGES.length - 1;
+  $('card').innerHTML = `
+    <h2>クリア!</h2>
+    <div class="big">${fmt(ms)}秒</div>
+    <p>${modified ? '設定変更中のため記録しません' : isBest ? '🎉 自己ベスト更新!' : 'ベスト: ' + fmt(prev) + '秒'}<br>トゲに当たった回数: ${g.deaths}</p>
+    <div class="row">
+      ${last ? '' : '<button class="primary" id="ovNext">次へ</button>'}
+      <button id="ovRetry">もう一度</button>
+      <button id="ovMenu">メニュー</button>
+    </div>`;
+  $('overlay').classList.add('on');
+  if (!last) $('ovNext').onclick = nextStage;
+  $('ovRetry').onclick = () => startStage(g.idx);
+  $('ovMenu').onclick = () => { stopGame(); $('overlay').classList.remove('on'); renderMenu(); };
+}
+function nextStage() { if (game.idx < STAGES.length - 1) startStage(game.idx + 1); }
+
+$('btnMenu').onclick = () => { stopGame(); renderMenu(); };
+$('btnRetry').onclick = () => startStage(game.idx);
+
+/* ===== 描画 ===== */
+function arrow(x, y, dx, dy, color, wdt) {
+  const m = Math.hypot(dx, dy); if (m < 1) return;
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = wdt;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + dx, y + dy); ctx.stroke();
+  const ux = dx / m, uy = dy / m, hs = 6 + wdt;
+  ctx.beginPath(); ctx.moveTo(x + dx, y + dy);
+  ctx.lineTo(x + dx - ux * hs - uy * hs * 0.6, y + dy - uy * hs + ux * hs * 0.6);
+  ctx.lineTo(x + dx - ux * hs + uy * hs * 0.6, y + dy - uy * hs - ux * hs * 0.6);
+  ctx.closePath(); ctx.fill();
+}
+
+function draw() {
+  const g = game, s = g.s, W = CONFIG.world.w, H = CONFIG.world.h, r = CONFIG.ballRadius;
+  ctx.fillStyle = '#0d0f14'; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = '#1a1e27'; ctx.lineWidth = 1;
+  for (let x = 40; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 40; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+  // スタート
+  ctx.strokeStyle = '#3a4150'; ctx.setLineDash([4, 4]); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(s.start[0], s.start[1], r + 6, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  // ゴール
+  const pulse = 1 + 0.08 * Math.sin(performance.now() / 200);
+  ctx.fillStyle = 'rgba(61,220,132,.18)'; ctx.strokeStyle = '#3ddc84'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(s.goal[0], s.goal[1], CONFIG.goalRadius * pulse, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#3ddc84'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('GOAL', s.goal[0], s.goal[1]);
+  // 壁
+  ctx.fillStyle = '#59627a';
+  for (const [x, y, w, h] of s.walls) ctx.fillRect(x, y, w, h);
+  // トゲ(斜線)
+  for (const [x, y, w, h] of s.spikes) {
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+    ctx.fillStyle = '#5a1820'; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#ff4d5e'; ctx.lineWidth = 3;
+    for (let k = -h; k < w; k += 10) { ctx.beginPath(); ctx.moveTo(x + k, y + h); ctx.lineTo(x + k + h, y); ctx.stroke(); }
+    ctx.restore();
+  }
+  // 軌跡
+  g.trail.push([g.x, g.y]); if (g.trail.length > 40) g.trail.shift();
+  for (let k = 0; k < g.trail.length; k++) {
+    ctx.fillStyle = `rgba(255,204,51,${k / g.trail.length * 0.35})`;
+    ctx.beginPath(); ctx.arc(g.trail[k][0], g.trail[k][1], r * k / g.trail.length, 0, Math.PI * 2); ctx.fill();
+  }
+  // 玉
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, Math.PI * 2); ctx.fill();
+  // 速度・加速度の矢印
+  arrow(g.x, g.y, g.vx * 0.25, g.vy * 0.25, 'rgba(120,180,255,.9)', 2);
+  if (g.c.mode !== 'velocity') arrow(g.x, g.y, g.ax * 0.2, g.ay * 0.2, 'rgba(255,120,200,.9)', 2);
+
+  // 回転ステージ: 「↑キーで進む向き」コンパス
+  if (g.c.rotSpeed) {
+    const cx = 34, cy = 34;
+    ctx.fillStyle = 'rgba(31,35,44,.85)'; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.fill();
+    const a = g.angle; // ↑(0,-1) を回したもの
+    arrow(cx, cy, Math.sin(a) * 20, -Math.cos(a) * 20, '#ffcc33', 3);
+    ctx.fillStyle = '#9aa3b5'; ctx.font = '10px sans-serif'; ctx.fillText('↑キー', cx, cy + 36);
+  }
+  // 凡例
+  ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(120,180,255,.9)';
+  ctx.fillText('青: 速度', W - 6, H - 20);
+  if (g.c.mode !== 'velocity') { ctx.fillStyle = 'rgba(255,120,200,.9)'; ctx.fillText('桃: 加速度', W - 6, H - 8); }
+  ctx.textAlign = 'center';
+
+  if (!g.timerOn) {
+    ctx.fillStyle = 'rgba(232,235,241,.8)'; ctx.font = 'bold 15px sans-serif';
+    ctx.fillText('動かすとタイマー開始', W / 2, H / 2);
+  }
+  if (g.flash > 0) { ctx.fillStyle = `rgba(255,77,94,${g.flash * 0.4})`; ctx.fillRect(0, 0, W, H); g.flash = Math.max(0, g.flash - 0.04); }
+
+  $('timer').textContent = fmt(g.elapsed);
+}
+
+renderMenu();
+
+// 自動テスト用フック(画面には影響しない)
+window.__oni = { game, held, STAGES, CONFIG, startStage, update, stopGame };
+</script>
+</body>
+</html>
