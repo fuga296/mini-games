@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070818">
+<title>NUM GACHA</title>
+<style>
+:root {
+  --bg: #070818; --bg2: #11132e; --panel: rgba(255,255,255,.06); --line: rgba(255,255,255,.12);
+  --text: #eef1ff; --muted: #9aa3c7; --accent: #8b7bff; --accent2: #ff5fd2;
+  --c: #dfe6f0; --g: #94a3b8;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: radial-gradient(120% 80% at 50% 0%, #1c1850 0%, var(--bg) 60%) fixed, var(--bg);
+  color: var(--text); font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  overflow-x: hidden; user-select: none; -webkit-user-select: none;
+}
+body::before { /* 星 */
+  content: ""; position: fixed; inset: 0; pointer-events: none; opacity: .5;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 72% 12%, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 38% 62%, #cbd5ff, transparent), radial-gradient(1px 1px at 88% 48%, #fff, transparent),
+    radial-gradient(1px 1px at 22% 82%, #fff, transparent), radial-gradient(1.5px 1.5px at 60% 90%, #ffd6f5, transparent),
+    radial-gradient(1px 1px at 50% 30%, #fff, transparent), radial-gradient(1px 1px at 5% 50%, #fff, transparent);
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+.app { max-width: 520px; margin: 0 auto; padding: 0 16px calc(24px + var(--safe-b)); position: relative; }
+
+/* ヘッダー */
+.top { position: sticky; top: 0; z-index: 5; padding: 12px 0 8px; background: linear-gradient(var(--bg) 70%, transparent); }
+.logo { margin: 0 0 10px; text-align: center; font-size: 26px; letter-spacing: .14em; font-weight: 900; }
+.logo b { background: linear-gradient(90deg, #7af, #c7f, #f7c, #fd6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 4px; }
+.tabs button { border: 0; background: none; padding: 10px; border-radius: 10px; font-weight: 700; color: var(--muted); }
+.tabs button[aria-selected="true"] { background: linear-gradient(135deg, #3b2fb0, #8a2c9c); color: #fff; box-shadow: 0 0 18px rgba(160,100,255,.4); }
+
+/* ガチャ画面 */
+.status { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
+.pips { display: flex; gap: 6px; align-items: center; }
+.pip { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #6b6fa8; }
+.pip.on { background: radial-gradient(circle at 35% 30%, #fff, #b9a8ff 40%, #6d4bff); border-color: #c9bcff; box-shadow: 0 0 10px #8b7bff; }
+.pips .lbl { font-size: 13px; color: var(--muted); margin-left: 4px; }
+.timer { font-size: 13px; color: var(--muted); text-align: right; }
+.timer b { color: var(--text); font-variant-numeric: tabular-nums; font-size: 15px; }
+
+.stage { position: relative; height: min(64vw, 300px); display: grid; place-items: center; margin: 6px 0 10px; }
+.orb-wrap { position: relative; width: min(46vw, 210px); aspect-ratio: 1; }
+.ring { position: absolute; inset: -14%; border-radius: 50%; border: 2px dashed rgba(180,160,255,.35); animation: spin 18s linear infinite; }
+.ring.r2 { inset: -26%; border-style: dotted; border-color: rgba(255,120,220,.25); animation-duration: 30s; animation-direction: reverse; }
+.orb { position: absolute; inset: 0; border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fff 0 6%, #c9bdff 18%, #6a4cff 52%, #2a136b 80%);
+  box-shadow: 0 0 40px #6d4bff, 0 0 90px rgba(255,80,210,.35), inset -12px -18px 40px rgba(0,0,0,.45);
+  display: grid; place-items: center; animation: bob 3.2s ease-in-out infinite; }
+.orb span { font-size: min(18vw, 84px); font-weight: 900; color: rgba(255,255,255,.9); text-shadow: 0 0 20px #fff; }
+.orb.busy { animation: shake .12s linear infinite; }
+.floaters { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.floaters i { position: absolute; font-style: normal; font-weight: 800; color: rgba(200,190,255,.35); animation: float 7s linear infinite; }
+
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn { border: 0; border-radius: 16px; padding: 16px 10px; font-size: 17px; font-weight: 800; letter-spacing: .04em;
+  background: linear-gradient(135deg, #6d4bff, #c23bd9); box-shadow: 0 6px 24px rgba(160,70,255,.45), inset 0 1px 0 rgba(255,255,255,.3); }
+.btn.alt { background: linear-gradient(135deg, #ff8a3d, #ff3d8b); box-shadow: 0 6px 24px rgba(255,80,120,.4), inset 0 1px 0 rgba(255,255,255,.3); }
+.btn small { display: block; font-size: 11px; font-weight: 600; opacity: .85; margin-top: 2px; }
+.btn:disabled { filter: grayscale(1) brightness(.6); box-shadow: none; cursor: default; }
+.btn:not(:disabled):active { transform: scale(.97); }
+.note { font-size: 12px; color: var(--muted); text-align: center; margin: 10px 0 18px; line-height: 1.6; }
+
+h2 { font-size: 14px; color: var(--muted); font-weight: 700; margin: 18px 0 8px; letter-spacing: .06em; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 800; border: 1px solid var(--c); color: var(--c);
+  background: color-mix(in srgb, var(--g) 16%, transparent); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty { color: var(--muted); font-size: 13px; }
+
+.rates { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-top: 18px; }
+.rates summary { font-weight: 700; font-size: 14px; cursor: pointer; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 8px; }
+td, th { padding: 6px 4px; border-bottom: 1px solid var(--line); text-align: left; }
+th { color: var(--muted); font-weight: 600; }
+td.r { text-align: right; font-variant-numeric: tabular-nums; }
+.tag { display: inline-block; min-width: 38px; text-align: center; padding: 2px 6px; border-radius: 6px; font-weight: 900; font-size: 11px;
+  color: #0b0b1a; background: var(--c); box-shadow: 0 0 10px var(--g); }
+.rainbow-bg { background: linear-gradient(90deg, #ff5a7a, #ffd23f, #4ade80, #60a5fa, #c084fc, #ff5fd2) !important; background-size: 300% 100% !important; animation: hue 3s linear infinite; }
+.rainbow-text { background: linear-gradient(90deg, #ff7a9a, #ffe36a, #7af0a6, #7ab8ff, #d49cff, #ff7ae0); background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text; color: transparent !important; animation: hue 3s linear infinite; }
+
+/* コレクション画面 */
+.stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.stat span { display: block; font-size: 11px; color: var(--muted); }
+.stat b { font-size: 17px; font-variant-numeric: tabular-nums; word-break: break-all; }
+.maxslot { border-radius: 14px; padding: 12px; margin: 8px 0 12px; text-align: center; border: 1px solid var(--line); background: var(--panel); }
+.maxslot .n { font-weight: 900; font-size: min(5.6vw, 24px); letter-spacing: .02em; }
+.maxslot.locked .n { color: #4a4f78; }
+.maxslot.got { border-color: #ff9be8; box-shadow: 0 0 24px rgba(255,80,210,.4), inset 0 0 24px rgba(255,80,210,.2); }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 3px; margin-bottom: 6px; }
+.seg button { border: 0; background: none; padding: 8px 4px; border-radius: 9px; font-size: 13px; font-weight: 700; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: rgba(139,123,255,.3); color: #fff; }
+.viewhelp { font-size: 12px; color: var(--muted); margin: 6px 2px 10px; line-height: 1.5; }
+
+.fold { border: 1px solid var(--line); border-radius: 14px; margin-bottom: 8px; background: rgba(255,255,255,.035); overflow: hidden; }
+.fold > button { width: 100%; border: 0; background: none; display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; text-align: left; }
+.fold .ttl { font-weight: 800; font-size: 15px; }
+.fold .rng { font-size: 11px; color: var(--muted); display: block; margin-top: 1px; }
+.fold .cnt { font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.fold .cnt b { color: var(--text); font-size: 14px; }
+.bar { height: 4px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; margin-top: 5px; }
+.bar i { display: block; height: 100%; background: var(--c); box-shadow: 0 0 8px var(--g); min-width: 0; }
+.chev { transition: transform .2s; color: var(--muted); }
+.fold.open .chev { transform: rotate(90deg); }
+.fold .body { padding: 0 10px 12px; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.cell { position: relative; border-radius: 10px; padding: 8px 3px 6px; min-height: 58px; text-align: center; border: 1px solid var(--c);
+  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--g) 35%, transparent), rgba(255,255,255,.03) 70%);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--g) 35%, transparent); overflow: hidden; }
+.cell .n { font-weight: 900; color: var(--c); font-size: 15px; line-height: 1.15; word-break: break-all; }
+.cell .n.s { font-size: 13px; } .cell .n.l { font-size: 16px; letter-spacing: .02em; }
+.cell .dots { display: flex; justify-content: center; gap: 2px; margin-top: 5px; }
+.cell .dots i { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,.15); }
+.cell .dots i.on { background: var(--c); box-shadow: 0 0 4px var(--g); }
+.cell.lock { border: 1px dashed #343861; background: rgba(0,0,0,.25); box-shadow: none; }
+.cell.lock .n { color: #3f4470; }
+.cell.lock::after { content: "?"; position: absolute; right: 5px; top: 2px; font-size: 10px; color: #4b5085; font-weight: 900; }
+.cell.wide { grid-column: span 2; }
+.cell.full { grid-column: 1 / -1; }
+.gap { grid-column: 1 / -1; border: 1px dashed #343861; border-radius: 10px; padding: 7px 10px; font-size: 12px; color: #6d73a8;
+  display: flex; justify-content: space-between; gap: 8px; background: repeating-linear-gradient(135deg, rgba(255,255,255,.02) 0 6px, transparent 6px 12px); }
+.gap b { color: #8f95c8; white-space: nowrap; }
+.gap span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.more { grid-column: 1 / -1; border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 8px; font-size: 13px; }
+
+.crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 10px; font-size: 13px; }
+.crumbs button { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 5px 9px; font-weight: 700; }
+.crumbs button:last-child { border-color: var(--accent); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.tile { border-radius: 12px; padding: 10px 8px; text-align: left; border: 1px solid var(--c); min-height: 74px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--g) 30%, transparent), rgba(255,255,255,.03));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--g) 30%, transparent); display: flex; flex-direction: column; justify-content: space-between; }
+.tile .lab { font-weight: 900; color: var(--c); font-size: 14px; word-break: break-all; line-height: 1.2; }
+.tile .sub { font-size: 11px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.tile.lock { border: 1px dashed #343861; background: rgba(0,0,0,.22); box-shadow: none; }
+.tile.lock .lab { color: #474c7c; }
+
+/* 詳細トースト */
+.toast { position: fixed; left: 50%; bottom: calc(18px + var(--safe-b)); transform: translateX(-50%) translateY(140%); z-index: 30;
+  width: min(92vw, 480px); background: #1a1c40; border: 1px solid var(--c, var(--line)); border-radius: 14px; padding: 12px 14px;
+  box-shadow: 0 10px 40px rgba(0,0,0,.6), 0 0 20px color-mix(in srgb, var(--g) 40%, transparent); transition: transform .25s; font-size: 13px; line-height: 1.6; }
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast .n { font-size: 20px; font-weight: 900; color: var(--c); word-break: break-all; }
+
+/* 開封演出 */
+.reveal { position: fixed; inset: 0; z-index: 20; background: radial-gradient(circle at 50% 45%, #1a1340, #03030c 70%); overflow: hidden; touch-action: manipulation; }
+.reveal[hidden], .summary[hidden] { display: none; }
+#fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.rays { position: absolute; left: 50%; top: 45%; width: 220vmax; height: 220vmax; transform: translate(-50%, -50%); opacity: 0; pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, color-mix(in srgb, var(--g) 70%, transparent) 0deg 5deg, transparent 5deg 15deg);
+  -webkit-mask: radial-gradient(circle, #000 0%, transparent 42%); mask: radial-gradient(circle, #000 0%, transparent 42%); }
+.reveal.burst .rays, .reveal.shown .rays { opacity: 1; animation: spin 14s linear infinite; transition: opacity .4s; }
+.halo { position: absolute; left: 50%; top: 45%; width: 70vmin; height: 70vmin; transform: translate(-50%, -50%); border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, color-mix(in srgb, var(--g) 60%, transparent), transparent 65%); opacity: 0; transition: opacity .3s; }
+.reveal.charge .halo, .reveal.burst .halo, .reveal.shown .halo { opacity: 1; }
+.capsule { position: absolute; left: 50%; top: 45%; width: 34vmin; height: 34vmin; max-width: 180px; max-height: 180px; border-radius: 50%; transform: translate(-50%, -50%) scale(.2);
+  background: radial-gradient(circle at 34% 28%, #fff 0 8%, var(--c) 30%, var(--g) 62%, #10071f 100%);
+  box-shadow: 0 0 40px var(--g), 0 0 120px var(--g); transition: background .25s, box-shadow .25s, transform .4s cubic-bezier(.2,1.6,.4,1); opacity: 0; }
+.reveal.charge .capsule { opacity: 1; transform: translate(-50%, -50%) scale(1); animation: rumble .09s linear infinite; }
+.reveal.charge.hard .capsule { animation-duration: .05s; }
+.reveal.burst .capsule, .reveal.shown .capsule { opacity: 0; transform: translate(-50%, -50%) scale(2.6); transition: transform .35s ease-out, opacity .35s; }
+.flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+.reveal.burst .flash { animation: flash .55s ease-out; }
+.card { position: absolute; left: 0; right: 0; top: 45%; transform: translateY(-50%); text-align: center; padding: 0 12px; opacity: 0; pointer-events: none; }
+.reveal.shown .card { opacity: 1; }
+.card .rk { display: inline-block; font-weight: 900; letter-spacing: .12em; font-size: 15px; padding: 4px 14px; border-radius: 999px; color: #0b0b1a; background: var(--c); box-shadow: 0 0 22px var(--g);
+  transform: scale(0); }
+.reveal.shown .card .rk { animation: pop .45s .1s cubic-bezier(.2,1.8,.4,1) forwards; }
+.card .num { margin: 18px 0 10px; font-weight: 900; line-height: 1.05; color: #fff; word-break: break-all;
+  text-shadow: 0 0 10px var(--g), 0 0 30px var(--g), 0 0 60px var(--g); font-variant-numeric: tabular-nums; }
+.card .num span { display: inline-block; opacity: 0; transform: translateY(30%) scale(1.8); }
+.card .num span.in { animation: digit .38s cubic-bezier(.2,1.6,.4,1) forwards; }
+.card .num span.cm { opacity: 0; transform: none; } .card .num span.cm.in { animation: fadein .2s forwards; }
+.card .meta { color: var(--c); font-weight: 700; font-size: 14px; opacity: 0; }
+.reveal.shown.done .card .meta { animation: fadein .3s forwards; }
+.card .new { display: inline-block; margin-left: 8px; background: linear-gradient(90deg, #ff3d8b, #ffb800); color: #fff; border-radius: 6px; padding: 1px 8px; font-size: 13px; font-weight: 900; transform: rotate(-6deg); }
+.card .carry { margin-top: 14px; display: grid; gap: 6px; justify-items: center; opacity: 0; }
+.reveal.shown.done .card .carry { animation: fadein .4s .25s forwards; }
+.carry div { font-size: 13px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.2); border-radius: 10px; padding: 6px 10px; max-width: 92vw; word-break: break-all; }
+.carry b { color: #ffe36a; }
+.rv-top { position: absolute; top: calc(10px + env(safe-area-inset-top, 0px)); left: 12px; right: 12px; display: flex; justify-content: space-between; align-items: center; z-index: 2; }
+.rv-top .cnt { font-weight: 800; color: var(--muted); font-size: 14px; }
+.rv-top button { border: 1px solid rgba(255,255,255,.3); background: rgba(0,0,0,.3); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 700; }
+.hint { position: absolute; bottom: calc(26px + var(--safe-b)); left: 0; right: 0; text-align: center; color: var(--muted); font-size: 13px; animation: blink 1.4s ease-in-out infinite; }
+
+.summary { position: fixed; inset: 0; z-index: 25; background: rgba(4,4,16,.94); overflow: auto; padding: 24px 16px calc(24px + var(--safe-b)); }
+.summary .in { max-width: 520px; margin: 0 auto; }
+.summary h3 { text-align: center; margin: 4px 0 16px; letter-spacing: .1em; }
+.sumlist { display: grid; gap: 8px; }
+.sumrow { border: 1px solid var(--c); border-radius: 12px; padding: 10px 12px; background: linear-gradient(90deg, color-mix(in srgb, var(--g) 28%, transparent), transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--g) 30%, transparent); opacity: 0; animation: slidein .35s forwards; }
+.sumrow .h { display: flex; align-items: center; gap: 8px; }
+.sumrow .n { font-weight: 900; font-size: 18px; color: var(--c); word-break: break-all; }
+.sumrow .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.summary .btn { width: 100%; margin-top: 16px; }
+
+.card .num.rainbow { animation: huerot 2.4s linear infinite; }
+@keyframes huerot { to { filter: hue-rotate(360deg); } }
+@keyframes spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.ring { animation-name: spin2; } @keyframes spin2 { to { transform: rotate(360deg); } }
+@keyframes bob { 50% { transform: translateY(-8px); } }
+@keyframes shake { 25% { transform: translate(3px, -2px); } 75% { transform: translate(-3px, 2px); } }
+@keyframes rumble { 25% { margin-left: 3px; margin-top: -2px; } 75% { margin-left: -3px; margin-top: 2px; } }
+@keyframes float { from { transform: translateY(110%); opacity: 0; } 20%, 80% { opacity: 1; } to { transform: translateY(-120%); opacity: 0; } }
+@keyframes flash { 0% { opacity: .95; } 100% { opacity: 0; } }
+@keyframes pop { to { transform: scale(1); } }
+@keyframes digit { to { opacity: 1; transform: none; } }
+@keyframes fadein { to { opacity: 1; } }
+@keyframes blink { 50% { opacity: .35; } }
+@keyframes hue { to { background-position: 300% 0; } }
+@keyframes slidein { from { transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .ring, .orb, .floaters i { animation: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1 class="logo">NUM <b>GACHA</b></h1>
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tab-gacha" aria-selected="true">ガチャ</button>
+      <button role="tab" id="tab-coll" aria-selected="false">コレクション</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="screen-gacha">
+      <div class="status">
+        <div class="pips" id="pips"></div>
+        <div class="timer">次の更新まで <b id="countdown">--:--:--</b></div>
+      </div>
+      <div class="stage">
+        <div class="floaters" id="floaters"></div>
+        <div class="orb-wrap">
+          <div class="ring"></div><div class="ring r2"></div>
+          <div class="orb" id="orb"><span>#</span></div>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn" id="btn1">1回まわす<small id="btn1sub">残り 5 回</small></button>
+        <button class="btn alt" id="btnAll">まとめてまわす<small id="btnAllsub">×5</small></button>
+      </div>
+      <p class="note" id="note"></p>
+
+      <h2>最近出た数字</h2>
+      <div class="chips" id="recent"></div>
+
+      <details class="rates">
+        <summary>提供割合</summary>
+        <table id="rates"></table>
+        <p class="note" id="ratenote" style="text-align:left;margin:8px 0 0"></p>
+      </details>
+    </section>
+
+    <section id="screen-coll" hidden>
+      <div class="stats" id="stats"></div>
+      <div class="maxslot" id="maxslot"></div>
+      <div class="seg" id="viewseg">
+        <button data-view="fold" aria-pressed="true">桁ごとに折りたたむ</button>
+        <button data-view="zoom" aria-pressed="false">10進ズーム</button>
+      </div>
+      <p class="viewhelp" id="viewhelp"></p>
+      <div id="collbody"></div>
+    </section>
+  </main>
+</div>
+
+<div class="reveal" id="reveal" hidden>
+  <canvas id="fx"></canvas>
+  <div class="rays"></div>
+  <div class="halo"></div>
+  <div class="capsule"></div>
+  <div class="flash"></div>
+  <div class="card" id="card"></div>
+  <div class="rv-top"><span class="cnt" id="rvcount"></span><button id="rvskip">スキップ</button></div>
+  <div class="hint" id="rvhint">タップで開封</div>
+</div>
+<div class="summary" id="summary" hidden><div class="in">
+  <h3>RESULT</h3>
+  <div class="sumlist" id="sumlist"></div>
+  <button class="btn" id="sumclose">とじる</button>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script src="logic.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
