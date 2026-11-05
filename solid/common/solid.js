@@ -377,7 +377,7 @@
     const H = Math.PI / 2;
     window.addEventListener('keydown', (e) => {
       if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName) && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
-      if (extra && extra(e) === true) { e.preventDefault(); return; }
+      if (extra) { const r = extra(e); if (r === true) { e.preventDefault(); return; } if (r === false) return; } // true=処理済み false=共通キーも使わない
       const k = e.key;
       const map = {
         i: () => viewer.rotateScreen(0, -H), k: () => viewer.rotateScreen(0, H),

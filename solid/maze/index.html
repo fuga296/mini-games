@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>3D迷路</title>
+<link rel="stylesheet" href="../common/solid.css">
+<style>
+  #fp, #map { position: absolute; inset: 0; }
+  #map { display: none; }
+  body.mapmode #map { display: block; }
+  body.mapmode #fp, body.mapmode #fpctl { display: none; }
+  #mapctl { display: none; }
+  body.mapmode #mapctl { display: flex; }
+  .hud { position: absolute; left: 0; right: 0; pointer-events: none; text-align: center; font-size: 12px; color: var(--sub); }
+  #cross { position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 2px solid rgba(255,255,255,.5); border-radius: 50%; pointer-events: none; }
+  #paths { bottom: 8px; }
+  #hint { top: 8px; color: var(--accent); }
+  #fpctl { display: grid; grid-template-columns: repeat(3, 46px) 1fr 76px; grid-template-rows: 40px 40px; gap: 4px; align-items: stretch; }
+  #fpctl .solid-btn { height: auto; min-width: 0; font-size: 16px; }
+  #fwd { grid-column: 5; grid-row: 1; font-size: 15px; }
+  #back { grid-column: 5; grid-row: 2; font-size: 13px; }
+  #fpctl .gap { grid-column: 4; grid-row: 1 / span 2; }
+  #rollL { grid-area: 1 / 1; } #pitchU { grid-area: 1 / 2; } #rollR { grid-area: 1 / 3; }
+  #yawL { grid-area: 2 / 1; } #pitchD { grid-area: 2 / 2; } #yawR { grid-area: 2 / 3; }
+  #mapctl { flex-direction: column; gap: 4px; }
+</style>
+</head>
+<body>
+<header class="solid-top">
+  <a href="../index.html" title="一覧へ">◀</a>
+  <h1>3D迷路</h1>
+  <select id="size" class="solid-sel" title="大きさ(一辺のマス数)"></select>
+  <button id="newgame" class="solid-btn" title="新しい迷路">↻</button>
+  <div class="solid-status"><span id="moves">0 歩</span><span id="time">⏱ 0:00</span></div>
+  <span class="solid-spacer"></span>
+  <button id="mapbtn" class="solid-btn" title="全体図 (Tab)">🗺</button>
+  <button id="settings" class="solid-btn" title="設定">⚙</button>
+  <button id="help" class="solid-btn" title="遊び方">?</button>
+</header>
+<main class="solid-stage" id="stage">
+  <div id="fp"><div id="cross"></div><div class="hud" id="hint"></div><div class="hud" id="paths"></div></div>
+  <div id="map"></div>
+  <div class="solid-toast" id="toast"></div>
+</main>
+<footer class="solid-bottom" id="bottom">
+  <div id="fpctl">
+    <button class="solid-btn" id="rollL" title="左に傾く (Q)">⟲</button>
+    <button class="solid-btn" id="pitchU" title="上(頭の方)を向く (↑ / R)">⤒</button>
+    <button class="solid-btn" id="rollR" title="右に傾く (E)">⟳</button>
+    <button class="solid-btn" id="yawL" title="左を向く (← / A)">↶</button>
+    <button class="solid-btn" id="pitchD" title="下(足の方)を向く (↓ / F)">⤓</button>
+    <button class="solid-btn" id="yawR" title="右を向く (→ / D)">↷</button>
+    <span class="gap"></span>
+    <button class="solid-btn" id="fwd" title="前へ進む (W / Space)">▲ 前進</button>
+    <button class="solid-btn" id="back" title="後ろへ下がる (S)">▼ 後退</button>
+  </div>
+  <div id="mapctl"></div>
+</footer>
+<script src="../common/three.min.js"></script>
+<script src="../common/solid.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
