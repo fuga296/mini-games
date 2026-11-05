@@ -142,7 +142,7 @@
       const d = fit * zoom;
       camera.position.set(pan.x * d, pan.y * d, d);
       camera.lookAt(pan.x * d, pan.y * d, 0);
-      dirty = true;
+      dirty = true; wake();
     }
     function computeFit() {
       const r = size.length() / 2;
