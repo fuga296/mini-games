@@ -41,3 +41,7 @@ body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; 
 .solid-toast { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); background: rgba(0, 0, 0, 0.7); padding: 6px 12px; border-radius: 999px; pointer-events: none; transition: opacity .3s; opacity: 0; white-space: nowrap; }
 .solid-toast.show { opacity: 1; }
 @media (max-width: 520px) { .solid-btn { min-width: 31px; padding: 0 4px; height: 34px; font-size: 13px; } .solid-sel { height: 34px; } .solid-label { min-width: 0; } .solid-rot .solid-label { display: none; } .solid-row { gap: 3px; } .solid-top h1 { font-size: 14px; } }
+.solid-pad { position: absolute; right: 8px; bottom: 8px; display: grid; grid-template-columns: repeat(3, 44px); grid-auto-rows: 44px; gap: 4px; z-index: 5; touch-action: none; }
+.solid-padbtn { width: 44px; height: 44px; min-width: 0; padding: 0; font-size: 16px; background: rgba(42, 49, 66, 0.82); backdrop-filter: blur(2px); }
+.solid-padbtn:active { background: var(--btn-on); }
+@media (max-width: 520px) { .solid-padbtn { width: 42px; height: 42px; font-size: 15px; } .solid-pad { grid-template-columns: repeat(3, 42px); grid-auto-rows: 42px; } }
