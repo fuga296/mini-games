@@ -39,7 +39,7 @@
   const lf = new Solid.LayerFrame(board);
   const bottom = $('bottom');
   const layer = Solid.createLayerControl(bottom, { dims: [5, 5, 5], axis: 2, onChange: () => { lf.update([nx, ny, nz], layer.state); rebuild(); } });
-  Solid.createRotateControls(bottom, viewer);
+  Solid.createRotatePad(stage, viewer); // 回転・拡大は盤面の上のパッド(下のパネルは層と操作だけ)
 
   const boxGeo = new T.BoxGeometry(1, 1, 1);
   let cubes = null, ghosts = null;

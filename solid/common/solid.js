@@ -296,6 +296,45 @@
     return wrap;
   };
 
+  /* ================= 盤面の上に重ねる回転パッド =================
+   * 3×3: [Z⟲][↑][Z⟳] / [←][⊞][→] / [＋][↓][－]
+   * タップ = 90°回す(アニメーション)。押し続ける = なめらかに連続回転。⊞ = 軸にそろえる(長押しで初期化) */
+  Solid.createRotatePad = function (stage, viewer) {
+    const pad = el('div', 'solid-pad');
+    const H = Math.PI / 2, RATE = 2.2; // rad/s(連続回転)
+    const defs = [
+      ['Z⟲', 'Z軸(奥行)で左回り', 2, 1], ['↑', 'X軸(横)で上へ回す', 0, -1], ['Z⟳', 'Z軸(奥行)で右回り', 2, -1],
+      ['←', 'Y軸(縦)で左へ回す', 1, -1], ['⊞', '軸にそろえる(長押しで初期化)'], ['→', 'Y軸(縦)で右へ回す', 1, 1],
+      ['＋', '拡大'], ['↓', 'X軸(横)で下へ回す', 0, 1], ['－', '縮小']
+    ];
+    for (const [t, title, axis, sign] of defs) {
+      const b = el('button', 'solid-btn solid-padbtn', t); b.title = title; b.setAttribute('aria-label', title);
+      let timer = 0, iv = 0, held = false;
+      const stop = () => { clearTimeout(timer); clearInterval(iv); iv = 0; };
+      b.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (_) {}
+        held = false;
+        if (axis != null) timer = setTimeout(() => { held = true; let last = performance.now();
+          iv = setInterval(() => { const now = performance.now(); viewer.rotateScreen(axis, sign * RATE * (now - last) / 1000, false); last = now; }, 16); }, 300);
+        else if (t === '⊞') timer = setTimeout(() => { held = true; viewer.reset(); }, 500);
+        else { const k = t === '＋' ? 1 / 1.08 : 1.08; timer = setTimeout(() => { held = true; iv = setInterval(() => viewer.setZoom(viewer.getZoom() * k), 16); }, 300); }
+      });
+      const up = () => {
+        const wasHeld = held; stop();
+        if (wasHeld) { held = false; return; }
+        if (axis != null) viewer.rotateScreen(axis, sign * H);
+        else if (t === '⊞') viewer.snap();
+        else viewer.setZoom(viewer.getZoom() * (t === '＋' ? 1 / 1.25 : 1.25));
+      };
+      b.addEventListener('pointerup', up);
+      b.addEventListener('pointercancel', () => { stop(); held = false; });
+      b.addEventListener('contextmenu', (e) => e.preventDefault());
+      pad.appendChild(b);
+    }
+    stage.appendChild(pad);
+    return pad;
+  };
+
   /* ================= 層(レイヤー)の切り替え ================= */
   // state: { mode: 'all'|'single'|'upto', axis: 0|1|2, index, ghost }
   //  all    : 全部表示
