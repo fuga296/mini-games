@@ -422,7 +422,7 @@
     const bg = el('div', 'solid-dialog-bg'); const box = el('div', 'solid-dialog');
     box.innerHTML = html;
     const row = el('div', 'solid-dialog-btns');
-    for (const [t, f] of buttons || [['閉じる']]) { const b = el('button', 'solid-btn solid-wide', t); b.onclick = () => { bg.remove(); f && f(); }; row.appendChild(b); }
+    for (const [t, f] of buttons || [['閉じる']]) { const b = el('button', 'solid-btn solid-wide', t); b.onclick = () => { if (f) f(); bg.remove(); }; /* 先に f を呼ぶ(ダイアログ内の入力を読めるように) */ row.appendChild(b); }
     box.appendChild(row); bg.appendChild(box);
     bg.addEventListener('pointerdown', (e) => { if (e.target === bg) bg.remove(); });
     document.body.appendChild(bg);

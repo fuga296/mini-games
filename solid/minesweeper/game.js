@@ -6,7 +6,8 @@
   /* ---- 難易度と地雷数(提案値。下の CONFIG / 設定画面で変更できる) ----
    * 26方向の隣接では、地雷密度 p のとき「周囲の地雷の期待値」は 26p。
    * 平面(8方向)の 初級12% / 中級16% / 上級21% だと 3.2〜5.4 になり数字が大きすぎる。
-   * 平面の期待値(0.99 / 1.25 / 1.65)に近い 1.5〜2 前後になるよう、5〜8% にした。 */
+   * 平面の期待値(初級0.99 / 中級1.25 / 上級1.65)に合わせ、5.6〜8.1% にした。
+   * 端のマスは隣が少ないので、実測の平均は 0.93 / 1.29 / 1.70 / 1.94(各20回の試算)。 */
   const LEVELS = [
     { id: 'easy',   name: '初級 5×5×5',      d: [5, 5, 5],    mines: 7 },    // 5.6%
     { id: 'normal', name: '中級 16×16×5',    d: [16, 16, 5],  mines: 80 },   // 6.3%
@@ -252,7 +253,8 @@
     const ga = points.geometry.attributes; ga.position.needsUpdate = ga.num.needsUpdate = ga.alpha.needsUpdate = true;
     points.geometry.setDrawRange(0, p);
 
-    // 枠: 対象マスと周囲26マス
+    // 枠: 対象マスと周囲26マス(開いて消えた 0 のマスは対象外)
+    if (hover >= 0 && (hover >= N || (state[hover] === OPEN && count[hover] === 0))) hover = -1;
     const f = hover >= 0 ? hover : selected;
     if (f >= 0 && f < N) {
       const x = X(f), y = Y(f), z = Z(f);
@@ -312,7 +314,7 @@
       <label>マスの大きさ <input type="number" id="cs" min="0.4" max="1" step="0.02" value="${CONFIG.cubeSize}"></label>
       <label>数字の大きさ <input type="number" id="ns" min="0.3" max="1.2" step="0.02" value="${CONFIG.numberSize}"></label>
       <label><input type="checkbox" id="sa" ${CONFIG.safeArea === 'neighbors' ? 'checked' : ''}> 最初のクリックの周り26マスも安全にする</label>
-      <p style="color:var(--sub)">目安: 26方向の数字の期待値 = 26 × 密度。標準の難易度は 1.5〜2.1 前後(密度 5.6〜8.1%)にしています。</p>`,
+      <p style="color:var(--sub)">目安: 26方向の数字の期待値 = 26 × 密度。標準の難易度は密度 5.6〜8.1%(端を含めた実際の平均は 0.9〜1.9 で、平面の初級〜上級とほぼ同じ)にしています。</p>`,
       [['キャンセル'], ['適用して新規', () => {
         const v = (id) => +document.getElementById(id).value;
         custom = { d: [v('cx'), v('cy'), v('cz')].map((n) => Math.max(1, Math.min(64, Math.round(n) || 1))), mines: 0 };
