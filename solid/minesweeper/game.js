@@ -18,6 +18,8 @@
     cubeSize: 0.82,     // マスの見た目の大きさ(1=隙間なし)。隙間で奥の様子が少し見える
     numberSize: 0.72,   // 数字の大きさ(マス=1)
     ghostOpacity: 0.13, // 「前後を薄く」で表示する層の不透明度
+    frame: 'grid',      // 盤面を囲む薄い枠: 'grid'=外枠+奥側3面のマス目 / 'box'=外枠だけ / 'off'=なし
+    frameOpacity: 0.22, // 格子の濃さ(外枠は約2倍)
     safeArea: 'neighbors' // 最初のクリック: 'neighbors'=周囲26マスも安全(必ず開く) / 'cell'=そのマスだけ安全
   };
   const HIDDEN = 0, OPEN = 1, FLAG = 2;
@@ -118,10 +120,45 @@
     pg.setAttribute('alpha', new T.BufferAttribute(new Float32Array(N), 1));
     points = new T.Points(pg, numMat); points.frustumCulled = false; board.add(points);
     layer.setDims([nx, ny, nz]); lf.update([nx, ny, nz], layer.state);
-    viewer.setBounds(new T.Vector3(nx, ny, nz)); viewer.reset(false);
+    buildFrame();
+    viewer.setBounds(new T.Vector3(nx, ny, nz)); viewer.reset(false); updateFrame();
     rebuild(); status();
   }
   let mineTotal = 0;
+
+  /* ---- 盤面を囲む薄い枠 ----
+   * 外枠(12辺)と、奥側3面のマス目。奥の面は回転に合わせて切り替わるので、
+   * 開いて空いた所を通して見たときに、奥行きの目安になる。 */
+  const frameGroup = new T.Group(); board.add(frameGroup);
+  let frameFaces = [], frameBox = null;
+  const FACE_N = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]; // +x -x +y -y +z -z
+  function buildFrame() {
+    for (const o of [...frameGroup.children]) { frameGroup.remove(o); o.geometry.dispose(); o.material.dispose(); }
+    frameFaces = []; frameBox = null;
+    if (CONFIG.frame === 'off') return;
+    const S = [nx, ny, nz];
+    const box = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(nx, ny, nz)),
+      new T.LineBasicMaterial({ color: 0xbcd0ff, transparent: true, opacity: Math.min(1, CONFIG.frameOpacity * 2.2), depthWrite: false }));
+    box.position.set(nx / 2, ny / 2, nz / 2); frameGroup.add(box); frameBox = box;
+    if (CONFIG.frame !== 'grid') return;
+    for (let f = 0; f < 6; f++) {
+      const a = f >> 1, u = (a + 1) % 3, v = (a + 2) % 3, pts = [];
+      const at = (cu, cv) => { const p = [0, 0, 0]; p[a] = (f & 1) ? 0 : S[a]; p[u] = cu; p[v] = cv; return p; };
+      for (let i = 0; i <= S[u]; i++) pts.push(...at(i, 0), ...at(i, S[v]));
+      for (let j = 0; j <= S[v]; j++) pts.push(...at(0, j), ...at(S[u], j));
+      const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pts, 3));
+      const m = new T.LineSegments(g, new T.LineBasicMaterial({ color: 0x9fb4e0, transparent: true, opacity: CONFIG.frameOpacity, depthWrite: false }));
+      frameGroup.add(m); frameFaces.push([f, m]);
+    }
+    updateFrame();
+  }
+  function updateFrame() { // カメラから遠い(奥の)面だけ表示する
+    if (!frameFaces.length) return;
+    const q = viewer.pivot.quaternion;
+    const v = new T.Vector3();
+    for (const [f, m] of frameFaces) { v.set(...FACE_N[f]).applyQuaternion(q); m.visible = v.z < 0; }
+  }
+  viewer.onRotate = () => { updateFrame(); };
 
   function placeMines(safe) {
     const excl = new Uint8Array(N); excl[safe] = 1;
@@ -312,6 +349,8 @@
       <p id="dens" style="color:var(--sub)"></p>
       <p>表示</p>
       <label>マスの大きさ <input type="number" id="cs" min="0.4" max="1" step="0.02" value="${CONFIG.cubeSize}"></label>
+      <label>枠 <select id="fr" class="solid-sel"><option value="grid" ${CONFIG.frame === 'grid' ? 'selected' : ''}>外枠+奥のマス目</option><option value="box" ${CONFIG.frame === 'box' ? 'selected' : ''}>外枠だけ</option><option value="off" ${CONFIG.frame === 'off' ? 'selected' : ''}>なし</option></select></label>
+      <label>枠の濃さ <input type="number" id="fo" min="0.05" max="1" step="0.05" value="${CONFIG.frameOpacity}"></label>
       <label>数字の大きさ <input type="number" id="ns" min="0.3" max="1.2" step="0.02" value="${CONFIG.numberSize}"></label>
       <label><input type="checkbox" id="sa" ${CONFIG.safeArea === 'neighbors' ? 'checked' : ''}> 最初のクリックの周り26マスも安全にする</label>
       <p style="color:var(--sub)">目安: 26方向の数字の期待値 = 26 × 密度。標準の難易度は密度 5.6〜8.1%(端を含めた実際の平均は 0.9〜1.9 で、平面の初級〜上級とほぼ同じ)にしています。</p>`,
@@ -320,6 +359,7 @@
         custom = { d: [v('cx'), v('cy'), v('cz')].map((n) => Math.max(1, Math.min(64, Math.round(n) || 1))), mines: 0 };
         custom.mines = Math.max(1, Math.min(custom.d[0] * custom.d[1] * custom.d[2] - 1, Math.round(v('cm')) || 1));
         CONFIG.cubeSize = Math.max(0.4, Math.min(1, v('cs') || 0.82)); CONFIG.numberSize = Math.max(0.3, Math.min(1.2, v('ns') || 0.72));
+        CONFIG.frame = document.getElementById('fr').value; CONFIG.frameOpacity = Math.max(0.05, Math.min(1, v('fo') || 0.22));
         CONFIG.safeArea = document.getElementById('sa').checked ? 'neighbors' : 'cell';
         viewer.onResize(viewer.size().w, viewer.size().h);
         level = { id: 'custom', name: 'カスタム' }; fillLevels(); newGame();
