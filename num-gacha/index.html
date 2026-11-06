@@ -148,8 +148,8 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 /* 詳細トースト */
 .toast { position: fixed; left: 50%; bottom: calc(18px + var(--safe-b)); transform: translateX(-50%) translateY(140%); z-index: 30;
   width: min(92vw, 480px); background: #1a1c40; border: 1px solid var(--c, var(--line)); border-radius: 14px; padding: 12px 14px;
-  box-shadow: 0 10px 40px rgba(0,0,0,.6), 0 0 20px color-mix(in srgb, var(--g) 40%, transparent); transition: transform .25s; font-size: 13px; line-height: 1.6; }
-.toast.show { transform: translateX(-50%) translateY(0); }
+  box-shadow: 0 10px 40px rgba(0,0,0,.6), 0 0 20px color-mix(in srgb, var(--g) 40%, transparent); transition: transform .25s, opacity .25s; opacity: 0; pointer-events: none; font-size: 13px; line-height: 1.6; }
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 .toast .n { font-size: 20px; font-weight: 900; color: var(--c); word-break: break-all; }
 
 /* 開封演出 */
@@ -219,6 +219,88 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 @keyframes blink { 50% { opacity: .35; } }
 @keyframes hue { to { background-position: 300% 0; } }
 @keyframes slidein { from { transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ガチャ画面の補助 */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+.panel > h2 { margin: 0 0 8px; }
+#gstats { display: none; }
+.rates.panel { margin-top: 18px; }
+.tierlist { display: none; }
+.trow { display: grid; grid-template-columns: 44px 34px 1fr auto; gap: 8px; align-items: center; width: 100%; border: 1px solid transparent; background: none; border-radius: 8px; padding: 3px 8px; text-align: left; }
+.trow .bar { margin: 0; }
+.trow:hover { background: rgba(255,255,255,.05); }
+.trow.sel { border-color: var(--c); background: color-mix(in srgb, var(--g) 18%, transparent); }
+.trow .t { font-weight: 800; font-size: 13px; }
+.trow .t small { display: block; font-weight: 500; font-size: 10px; color: var(--muted); }
+.trow .cnt { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.trow .cnt b { color: var(--text); }
+.trow .bar { margin-top: 3px; }
+.tierhead { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.tierhead b { font-size: 18px; }
+.tierhead span { color: var(--muted); font-size: 12px; }
+
+/* ===== パソコン: 1画面に収める (幅 960px 以上 かつ 高さ 560px 以上) ===== */
+@media (min-width: 960px) and (min-height: 560px) {
+  html, body { height: 100%; overflow: hidden; }
+  .app { max-width: 1280px; height: 100vh; padding: 0 32px 20px; display: flex; flex-direction: column; }
+  .top { position: static; display: flex; align-items: center; justify-content: space-between; padding: 14px 0; background: none; }
+  .logo { margin: 0; font-size: 24px; }
+  .tabs { width: 360px; }
+  main { flex: 1; min-height: 0; }
+  #screen-gacha, #screen-coll { height: 100%; display: grid; gap: 24px; min-height: 0; }
+  #screen-gacha[hidden], #screen-coll[hidden] { display: none; }
+
+  /* ガチャ: 左に演出とボタン、右に情報 */
+  #screen-gacha { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+  .g-main { display: flex; flex-direction: column; min-height: 0; }
+  .stage { flex: 1; height: auto; min-height: 0; margin: 4px 0 12px; }
+  .orb-wrap { width: min(40vh, 300px); }
+  .orb span { font-size: min(14vh, 96px); }
+  .btn { padding: 18px 10px; }
+  .note { margin: 12px 0 0; }
+  .g-side { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  #gstats { display: grid; }
+  .g-side .panel { margin: 0; }
+  .rates.panel { flex: 1; min-height: 0; overflow: auto; }
+  .rates summary { pointer-events: none; list-style: none; }
+  .rates summary::-webkit-details-marker { display: none; }
+  .rates table { font-size: 12.5px; }
+  .rates td, .rates th { padding: 5px 4px; }
+  .stats { margin: 0; gap: 8px; grid-template-columns: repeat(4, 1fr); }
+  .stat { padding: 8px 10px; }
+  .stat b { font-size: 15px; }
+  h2 { margin: 0 0 8px; }
+
+  /* コレクション: 左に概要と桁の一覧、右に中身 */
+  #screen-coll { grid-template-columns: 360px minmax(0, 1fr); }
+  .c-side { display: flex; flex-direction: column; min-height: 0; }
+  .c-side .stats { grid-template-columns: 1fr; gap: 3px; margin-bottom: 8px; }
+  .c-side .stat { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 10px; }
+  .c-side .stat b { font-size: 13px; word-break: normal; }
+  .c-side .stat span { font-size: 11px; }
+  .maxslot { margin: 0 0 10px; padding: 8px; }
+  .maxslot .n { font-size: 20px; }
+  .viewhelp { display: none; }
+  .tierlist { display: block; flex: 1; min-height: 0; overflow-y: auto; margin-top: 2px; }
+  .c-main { min-height: 0; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); }
+  .tiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+
+  .summary .in { max-width: 820px; }
+  .sumlist { grid-template-columns: 1fr 1fr; }
+  .toast { left: auto; right: 32px; transform: translateY(140%); }
+  .toast.show { transform: translateY(0); opacity: 1; }
+}
+
+@media (min-width: 960px) and (min-height: 560px) and (max-height: 760px) {
+  .top { padding: 8px 0; }
+  .c-side .stat { padding: 2px 10px; }
+  .maxslot { padding: 5px; margin-bottom: 6px; }
+  .maxslot .n { font-size: 17px; }
+  .seg { margin-bottom: 4px; }
+  .seg button { padding: 5px 4px; }
+  .trow { padding: 1px 8px; }
+}
 @media (prefers-reduced-motion: reduce) { .ring, .orb, .floaters i { animation: none; } }
 </style>
 </head>
@@ -234,42 +316,50 @@ td.r { text-align: right; font-variant-numeric: tabular-nums; }
 
   <main>
     <section id="screen-gacha">
-      <div class="status">
-        <div class="pips" id="pips"></div>
-        <div class="timer">次の更新まで <b id="countdown">--:--:--</b></div>
-      </div>
-      <div class="stage">
-        <div class="floaters" id="floaters"></div>
-        <div class="orb-wrap">
-          <div class="ring"></div><div class="ring r2"></div>
-          <div class="orb" id="orb"><span>#</span></div>
+      <div class="g-main">
+        <div class="status">
+          <div class="pips" id="pips"></div>
+          <div class="timer">次の更新まで <b id="countdown">--:--:--</b></div>
         </div>
+        <div class="stage">
+          <div class="floaters" id="floaters"></div>
+          <div class="orb-wrap">
+            <div class="ring"></div><div class="ring r2"></div>
+            <div class="orb" id="orb"><span>#</span></div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btn1">1回まわす<small id="btn1sub">残り 5 回</small></button>
+          <button class="btn alt" id="btnAll">まとめてまわす<small id="btnAllsub">×5</small></button>
+        </div>
+        <p class="note" id="note"></p>
       </div>
-      <div class="actions">
-        <button class="btn" id="btn1">1回まわす<small id="btn1sub">残り 5 回</small></button>
-        <button class="btn alt" id="btnAll">まとめてまわす<small id="btnAllsub">×5</small></button>
+      <div class="g-side">
+        <div class="stats" id="gstats"></div>
+        <div class="panel">
+          <h2>最近出た数字</h2>
+          <div class="chips" id="recent"></div>
+        </div>
+        <details class="rates panel" id="ratesbox">
+          <summary>提供割合</summary>
+          <table id="rates"></table>
+          <p class="note" id="ratenote" style="text-align:left;margin:8px 0 0"></p>
+        </details>
       </div>
-      <p class="note" id="note"></p>
-
-      <h2>最近出た数字</h2>
-      <div class="chips" id="recent"></div>
-
-      <details class="rates">
-        <summary>提供割合</summary>
-        <table id="rates"></table>
-        <p class="note" id="ratenote" style="text-align:left;margin:8px 0 0"></p>
-      </details>
     </section>
 
     <section id="screen-coll" hidden>
-      <div class="stats" id="stats"></div>
-      <div class="maxslot" id="maxslot"></div>
-      <div class="seg" id="viewseg">
-        <button data-view="fold" aria-pressed="true">桁ごとに折りたたむ</button>
-        <button data-view="zoom" aria-pressed="false">10進ズーム</button>
+      <div class="c-side">
+        <div class="stats" id="stats"></div>
+        <div class="maxslot" id="maxslot"></div>
+        <div class="seg" id="viewseg">
+          <button data-view="fold" aria-pressed="true">桁ごとに折りたたむ</button>
+          <button data-view="zoom" aria-pressed="false">10進ズーム</button>
+        </div>
+        <p class="viewhelp" id="viewhelp"></p>
+        <div class="tierlist" id="tierlist"></div>
       </div>
-      <p class="viewhelp" id="viewhelp"></p>
-      <div id="collbody"></div>
+      <div class="c-main" id="collbody"></div>
     </section>
   </main>
 </div>
