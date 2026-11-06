@@ -3,6 +3,6 @@
   "private": true,
   "description": "人狼ゲーム（ロジックは core/ と rules/、画面は index.html と ui/）",
   "scripts": {
-    "test": "node --test tests/standard.test.js tests/plugpoints.test.js"
+    "test": "node --test tests/*.test.js"
   }
 }

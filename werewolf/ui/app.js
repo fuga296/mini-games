@@ -9,7 +9,13 @@
 (function () {
   'use strict';
   var WW = globalThis.WW;
-  var E = WW.engine, RS = WW.standard, T = WW.textJa, Session = WW.session;
+  var RULESETS = { standard: WW.standard, powerword: WW.powerword };
+  var RULE_INFO = {
+    standard: '役職と話し合いだけで進む、基本の人狼。',
+    powerword: '毎晩、人狼にだけ「パワーワード」が配られます。人狼は次の昼の話し合いでそれを自然に使わなければならず、言葉は翌朝に全員へ明かされます。',
+  };
+  var E = WW.engine, RS = RULESETS.standard, T = WW.textJa, Session = WW.session;
+  function setRules(id) { RS = RULESETS[id] || RULESETS.standard; }
   var SAVE_KEY = 'werewolf.save.v1';
   var NAMES_KEY = 'werewolf.names.v1';
   var SETTINGS_KEY = 'werewolf.settings.v1';
@@ -33,6 +39,8 @@
     { key: 'voteReveal', label: '投票結果の公開', type: 'select', options: [['open', '誰が誰に入れたか'], ['count', '票数だけ']] },
     { key: 'allowSelfVote', label: '自分への投票', type: 'select', options: [[false, '不可'], [true, '可']] },
     { key: 'revealRoleOnDeath', label: '死亡時の役職公開', type: 'select', options: [[false, '公開しない'], [true, '公開する']] },
+    { key: 'powerWordShared', rules: ['powerword'], label: 'パワーワードの配り方', type: 'select', options: [[true, '人狼全員が同じワード'], [false, '人狼ごとに別のワード']] },
+    { key: 'powerWordMaxLevel', rules: ['powerword'], label: 'パワーワードの難しさ', type: 'select', options: [[1, '自然に言えるものだけ'], [2, 'ふつうまで'], [3, '不自然になりがちなものも']] },
     { key: 'secretVote', ui: true, label: '投票のしかた（スマホを回す形）', type: 'select', options: [[true, '1人ずつ秘密に入力'], [false, '指差しでまとめて入力']] },
     { key: 'dummyAction', ui: true, label: '能力のない人の夜の操作', type: 'select', options: [[true, 'ダミーの選択をさせる'], [false, '確認だけ']] },
   ];
@@ -50,6 +58,7 @@
     gmVotes: {},        // 司会/まとめ入力の投票の下書き
     timer: { remaining: null, running: false, endAt: 0, key: null },
     showLog: false,
+    peek: null,         // 昼に、自分の役職やワードをこっそり見る { stage:'pick'|'show', pid }
   };
 
   // ---------------- 保存 ----------------
@@ -124,9 +133,10 @@
     var resume = saved && saved.state && !saved.state.result
       ? '<div class="card"><p>前回のゲームが途中です。</p>' + btn('続きから遊ぶ', 'resume', '', 'primary') + btn('破棄する', 'discard', '', 'ghost') + '</div>'
       : '';
-    return '<header class="title"><div class="moon"></div><h1>人狼ゲーム</h1><p class="sub">村人と人狼の、話し合いと推理のゲーム</p></header>' +
+    return '<header class="title"><div class="lead"><p>この村に、<br>人ならざるものが<br>紛れている。</p>' +
+      '<p class="quiet">スマホ1台で遊ぶ、推理のゲーム。</p></div><h1 aria-label="人狼"><span>人</span><span>狼</span></h1></header>' +
       resume +
-      '<div class="card"><h2>遊び方を選ぶ</h2>' +
+      '<div class="modes">' +
       '<button class="mode" data-action="new" data-mode="pass"><b>スマホ1台を回す</b><span>司会なし。秘密の画面は本人だけが見ます。夜も全員が順番にスマホを持ちます。</span></button>' +
       '<button class="mode" data-action="new" data-mode="gm"><b>司会役の支援</b><span>司会が1人つき、スマホを持ちます。台本を読みながら、夜の行動や投票を入力します。</span></button>' +
       '</div>' +
@@ -134,6 +144,7 @@
   }
 
   function renderRules() {
+    setRules('standard');
     var list = RS.roleOrder.map(function (id) {
       var r = role(id);
       return '<li><b class="' + teamClass(r.team) + '">' + h(r.name) + '</b>（' + h(RS.teams[r.team].name) + '）<br>' + h(r.description) + '</li>';
@@ -144,7 +155,7 @@
       '<li><b>朝</b>：犠牲者が発表されます。</li>' +
       '<li><b>昼</b>：話し合い、投票で1人を処刑します。</li>' +
       '<li>人狼が全滅すれば村人陣営の勝ち。人狼の数が人間（人狼以外）の数以上になれば人狼陣営の勝ち。</li>' +
-      '</ol></div><div class="card"><h2>役職</h2><ul class="roles">' + list + '</ul></div>' +
+      '</ol></div><div class="card"><h2>パワーワード人狼</h2><p>' + h(RULE_INFO.powerword) + '</p><p class="hint">準備の画面で、ゲームの種類として選べます。</p></div><div class="card"><h2>役職</h2><ul class="roles">' + list + '</ul></div>' +
       '<div class="card">' + btn('戻る', 'home', '', 'ghost') + '</div>';
   }
 
@@ -153,8 +164,10 @@
     var names = load(NAMES_KEY) || ['', '', '', '', '', ''];
     var settings = load(SETTINGS_KEY) || {};
     app.mode = mode;
+    setRules(settings.rulesId);
     app.ui = Object.assign({}, UI_DEFAULTS, settings.ui || {});
     app.setup = {
+      rulesId: RS.id,
       names: names.slice(0, RS.maxPlayers),
       config: Object.assign({}, RS.defaultConfig, settings.config || {}),
       auto: true,
@@ -188,7 +201,7 @@
         '<button class="icon" data-action="count" data-role="' + id + '" data-delta="1">＋</button></div>';
     }).join('');
     var err = RS.validateRoles(n, s.counts);
-    var fields = CONFIG_FIELDS.filter(function (f) { return !(f.ui && app.mode === 'gm' && f.key === 'secretVote') && !(f.ui && app.mode === 'gm' && f.key === 'dummyAction'); })
+    var fields = CONFIG_FIELDS.filter(function (f) { return !(f.ui && app.mode === 'gm' && f.key === 'secretVote') && !(f.ui && app.mode === 'gm' && f.key === 'dummyAction') && (!f.rules || f.rules.indexOf(RS.id) >= 0); })
       .map(function (f) {
         var val = f.ui ? app.ui[f.key] : s.config[f.key];
         var opts = f.options.map(function (o) {
@@ -197,6 +210,9 @@
         return '<label class="field"><span>' + h(f.label) + '</span><select data-config="' + f.key + '" data-ui="' + (f.ui ? 1 : 0) + '">' + opts + '</select></label>';
       }).join('');
     return '<div class="card"><h2>' + (app.mode === 'gm' ? '司会役の支援' : 'スマホ1台を回す') + '：準備</h2>' +
+      '<label class="field"><span>ゲームの種類</span><select data-rules="1">' +
+      Object.keys(RULESETS).map(function (id) { return '<option value="' + id + '"' + (RS.id === id ? ' selected' : '') + '>' + h(RULESETS[id].name) + '</option>'; }).join('') +
+      '</select></label><p class="ruleinfo">' + h(RULE_INFO[RS.id]) + '</p>' +
       '<h3>参加者（' + n + '人）' + (app.mode === 'gm' ? '<small>司会は含めません</small>' : '') + '</h3>' +
       '<p class="hint">座っている順に入力してください。夜にスマホを回す順になります。</p>' +
       players +
@@ -215,7 +231,7 @@
   function startGame() {
     var names = setupNames();
     store(NAMES_KEY, app.setup.names);
-    store(SETTINGS_KEY, { config: app.setup.config, ui: app.ui });
+    store(SETTINGS_KEY, { rulesId: RS.id, config: app.setup.config, ui: app.ui });
     var state;
     try {
       state = E.createGame(RS, {
@@ -269,9 +285,25 @@
   function renderGame() {
     var pv = pubView();
     if (app.announce) return renderAnnounce(pv);
+    if (app.peek && app.mode === 'pass') return renderPeek(pv);
     if (pv.phase === 'end') return renderEnd();
     if (app.mode === 'pass') return renderPass(pv);
     return renderGM();
+  }
+
+  function renderPeek(pv) {
+    if (app.peek.stage === 'pick') {
+      return header(pv) + '<div class="card"><h2>こっそり確認する</h2><p class="hint">自分の名前を選んでください。周りの人は、画面を見ないでください。</p>' +
+        targetButtons(pv, pv.players.map(function (p) { return p.id; }), 'peekPick', null) + '</div>' +
+        '<div class="card sticky">' + btn('やめる', 'peekClose', '', 'ghost') + '</div>';
+    }
+    var v = app.session.view(app.peek.pid);
+    var lastWord = null;
+    v.log.forEach(function (ev) { if (ev.type === 'powerWordGiven' && myWord(v, ev)) lastWord = ev; });
+    var now = lastWord && v.phase === 'day' && lastWord.day === v.day - 1
+      ? wordBlock(myWord(v, lastWord), 'いまの昼に使うべきワード') : '';
+    return header(v) + '<div class="card private">' + roleCard(v) + now + '</div>' + privateNotesCard(v) +
+      '<div class="card sticky">' + btn('閉じる（スマホを机に戻す）', 'peekClose', '', 'primary') + '</div>';
   }
 
   function renderAnnounce(pv) {
@@ -308,6 +340,13 @@
     return app.flow;
   }
 
+  function handoffCard(name, i, total, lead) {
+    return '<div class="card handoff"><p class="step">' + (i + 1) + ' / ' + total + '</p>' +
+      '<div class="seal" aria-hidden="true">' + h(String(name).charAt(0)) + '</div>' +
+      '<p class="who">' + h(name) + '</p><p class="to">さんの手に、スマホを渡してください。</p>' +
+      (lead ? '<p class="hint">' + h(lead) + '</p>' : '') + '</div>';
+  }
+
   function renderPass(pv) {
     var secretPhase = pv.phase === 'reveal' || pv.phase === 'night' || (pv.vote && app.ui.secretVote);
     if (!secretPhase) return pv.vote ? renderOpenVote(pv, false) : renderDay(pv);
@@ -316,10 +355,9 @@
     var pid = f.queue[f.i];
     var name = T.nameOf(pv, pid);
     if (f.stage === 'handoff') {
-      var lead = pv.phase === 'reveal' ? '自分の役職を確認します。' : pv.phase === 'night' ? '夜の行動をします。周りの人は画面を見ないでください。' : '投票します。周りの人は画面を見ないでください。';
-      return header(pv) + '<div class="card handoff"><p class="step">' + (f.i + 1) + ' / ' + f.queue.length + '</p>' +
-        '<p>スマホを</p><p class="who">' + h(name) + '</p><p>さんに渡してください。</p><p class="hint">' + h(lead) + '</p></div>' +
-        '<div class="card sticky">' + btn(h(name) + ' です（開く）', 'openPrivate', '', 'primary') + '</div>';
+      var lead = pv.phase === 'reveal' ? '自分の役職を確認します。周りの人は、画面を見ないでください。' : pv.phase === 'night' ? '夜の行動をします。周りの人は、画面を見ないでください。' : '投票します。周りの人は、画面を見ないでください。';
+      return header(pv) + handoffCard(name, f.i, f.queue.length, lead) +
+        '<div class="card sticky">' + btn('封を切る', 'openPrivate', '', 'primary') + '</div>';
     }
     var v = app.session.view(pid);
     if (pv.phase === 'reveal') return renderReveal(v);
@@ -338,6 +376,12 @@
       '<p>' + h(r.description) + '</p>' +
       (allies.length ? '<p class="allies">仲間：' + allies.join('、') + '</p>' : '') + '</div>';
   }
+
+  /** 人狼にだけ配られるパワーワードの札 */
+  function wordBlock(word, caption) {
+    return '<div class="result word"><small>' + h(caption) + '</small><b>' + h(word.text) + '</b><small>' + h(word.kind) + '</small></div>';
+  }
+  function myWord(v, ev) { return ev.data.words[v.me.id] || null; }
 
   function privateNotes(v) {
     var mine = v.log.filter(function (ev) { return Array.isArray(ev.visibleTo) && ev.type !== 'roleAssigned'; });
@@ -381,7 +425,10 @@
     // 今夜わかったこと（占い結果・霊媒結果）
     var tonight = v.log.filter(function (ev) {
       return Array.isArray(ev.visibleTo) && ev.day === v.day && ev.phase === 'night';
-    }).map(function (ev) { return '<p class="result">' + h(T.formatEvent(ev, v, RS)) + '</p>'; }).join('');
+    }).map(function (ev) {
+      if (ev.type === 'powerWordGiven' && myWord(v, ev)) return wordBlock(myWord(v, ev), '明日の昼の話し合いで、このワードを自然に使うこと。他の人に気づかれないように。');
+      return '<p class="result">' + h(T.formatEvent(ev, v, RS)) + '</p>';
+    }).join('');
     return header(v) + '<div class="card private">' + roleCard(v) + tonight + body + '</div>' +
       privateNotesCard(v) +
       '<div class="card sticky">' + btn('終わった（画面を閉じる）', 'closePrivate', canClose ? '' : 'disabled', 'primary') + '</div>';
@@ -416,12 +463,25 @@
     var gm = app.mode === 'gm';
     var t = timerState(pv);
     var revealed = pv.config.revealRoleOnDeath;
-    return header(pv) +
+    var gv = gm ? gmView() : null;
+    // パワーワード人狼：前日のワードの公開と、今日人狼が使うべきワード（司会のみ）
+    var rv = pv.log.filter(function (e) { return e.type === 'powerWordReveal' && e.day === pv.day && !e.data.final; }).pop();
+    var revealCard = rv
+      ? '<div class="card morning"><h3>昨日の人狼のパワーワード</h3><p class="big">' + rv.data.words.map(function (w) { return '「' + h(w.text) + '」'; }).join('') + '</p>' +
+        '<p class="hint">人狼は、昨日の話し合いのどこかで、この言葉を使っていたはずです。</p></div>' : '';
+    var todayWord = '';
+    if (gm) {
+      var given = gv.log.filter(function (e) { return e.type === 'powerWordGiven' && e.day === pv.day - 1; });
+      if (given.length) todayWord = '<div class="card"><h3>今日、人狼が使うべきワード（司会だけが見る）</h3>' +
+        given.map(function (e) { return '<div class="result word"><b>' + h(T.formatEvent(e, gv, RS).replace(/^[^：]*：/, '')) + '</b></div>'; }).join('') + '</div>';
+    }
+    var peekBtn = !gm ? '<div class="card">' + btn('こっそり自分の役職を確認する', 'peek', '', 'ghost small') + '</div>' : '';
+    return header(pv) + revealCard +
       (gm ? '<div class="card script"><p>「' + h(T.script.nightEnd) + '」</p><p>「' + h(msg.replace(/^朝：/, '')) + '」</p><p>「' + h(T.script.dayStart) + '」</p></div>' : '<div class="card"><p class="big">' + h(msg.replace(/^朝：/, '')) + '</p></div>') +
       '<div class="card timer"><div class="time" id="time">' + fmtTime(t.remaining) + '</div>' +
       btn(t.running ? '一時停止' : '話し合い開始', 'timerToggle', '', t.running ? '' : 'primary') +
       btn('＋30秒', 'timerAdd', '', 'ghost small') + btn('リセット', 'timerReset', '', 'ghost small') + '</div>' +
-      '<div class="card"><h3>参加者</h3>' + playerChips(gm ? gmView() : pv, { roles: gm || revealed }) + '</div>' +
+      '<div class="card"><h3>参加者</h3>' + playerChips(gm ? gv : pv, { roles: gm || revealed }) + '</div>' + todayWord + peekBtn +
       (gm ? gmPanel() : '<details class="card"><summary>これまでの記録（全員に公開されたもの）</summary>' + logList(pv) + '</details>') +
       '<div class="card sticky">' + btn('投票へ進む', 'advance', '', 'primary') + '</div>';
   }
@@ -508,8 +568,8 @@
       var pid = f.queue[f.i];
       if (f.stage === 'handoff') {
         return header(gv) + '<div class="card script"><p>「' + h(T.script.revealGM) + '」</p></div>' +
-          '<div class="card handoff"><p class="step">' + (f.i + 1) + ' / ' + f.queue.length + '</p><p>スマホを</p><p class="who">' + h(T.nameOf(gv, pid)) + '</p><p>さんに渡してください。</p></div>' +
-          '<div class="card sticky">' + btn(h(T.nameOf(gv, pid)) + ' です（開く）', 'openPrivate', '', 'primary') + '</div>';
+          handoffCard(T.nameOf(gv, pid), f.i, f.queue.length, '') +
+          '<div class="card sticky">' + btn('封を切る', 'openPrivate', '', 'primary') + '</div>';
       }
       return renderReveal(app.session.view(pid));
     }
@@ -522,7 +582,14 @@
     var steps = T.nightCalls.filter(function (c) { return counts[c.roleId]; }).map(function (c) {
       var holders = gv.players.filter(function (p) { return p.roleId === c.roleId && p.alive; });
       var who = holders.length ? '<small>' + h(holders.map(function (p) { return p.name; }).join('・')) + '</small>' : '<small>生存者なし</small>';
-      var html = '<div class="card step"><h3>' + h(role(c.roleId).name) + who + '</h3><p class="say">「' + h(c.open) + '」</p>';
+      var wordHtml = '';
+      if (c.roleId === 'werewolf') {
+        gv.log.filter(function (e) { return e.type === 'powerWordGiven' && e.day === gv.day && e.phase === 'night'; }).forEach(function (e) {
+          var ids = Object.keys(e.data.words);
+          wordHtml += '<div class="result word"><small>人狼に見せるパワーワード' + (e.data.shared ? '（全員共通）' : '（' + h(T.nameOf(gv, ids[0])) + '）') + '</small><b>' + h(e.data.words[ids[0]].text) + '</b><small>明日の昼に使わせる。見せたら画面を伏せる。</small></div>';
+        });
+      }
+      var html = '<div class="card step"><h3>' + h(role(c.roleId).name) + who + '</h3><p class="say">「' + h(c.open) + '」</p>' + wordHtml;
       var opts = holders.length && c.actionId ? (gv.gmOptions[holders[0].id] || []).filter(function (a) { return a.actionId === c.actionId; })[0] : null;
       if (c.actionId && opts) {
         html += '<p class="say">「' + h(c.act) + '」</p>';
@@ -601,6 +668,7 @@
       case 'resume': {
         var s = load(SAVE_KEY);
         app.mode = s.mode; app.ui = Object.assign({}, UI_DEFAULTS, s.ui || {});
+        setRules(s.state.rulesetId);
         app.session = Session.createLocalSession(RS, s.state);
         app.flow = s.flow; app.announce = s.announce; app.screen = 'game';
         break;
@@ -641,6 +709,9 @@
         });
         break;
       }
+      case 'peek': app.peek = { stage: 'pick' }; break;
+      case 'peekPick': app.peek = { stage: 'show', pid: d.target }; break;
+      case 'peekClose': app.peek = null; break;
       case 'closeAnnounce': app.announce = null; save(); break;
       case 'timerToggle': {
         var t = app.timer;
@@ -679,7 +750,16 @@
   });
   document.addEventListener('change', function (e) {
     var el = e.target;
-    if (el.dataset.config) {
+    if (el.dataset.rules) {
+      var prev = app.setup.config;
+      setRules(el.value);
+      app.setup.rulesId = RS.id;
+      var cfg = Object.assign({}, RS.defaultConfig);
+      Object.keys(prev).forEach(function (k) { if (k in cfg) cfg[k] = prev[k]; });
+      app.setup.config = cfg;
+      syncCounts();
+      render();
+    } else if (el.dataset.config) {
       var val = JSON.parse(el.value);
       if (el.dataset.ui === '1') app.ui[el.dataset.config] = val; else app.setup.config[el.dataset.config] = val;
       render();

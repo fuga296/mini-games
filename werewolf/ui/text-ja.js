@@ -35,7 +35,15 @@
         case 'attackBlocked': return '襲撃失敗（' + (d.by === 'guard' ? '護衛' : '耐性') + '）：' + nameOf(view, d.targetId);
         case 'death': return '死亡（' + (causes[d.cause] || d.cause) + '）：' + nameOf(view, d.playerId);
         case 'roleRevealed': return nameOf(view, d.playerId) + ' の役職は「' + roleName(rs, d.roleId) + '」でした';
-        case 'dawn': return d.deaths.length ? '朝：' + names(view, d.deaths) + ' が無残な姿で発見されました' : '朝：昨夜の犠牲者はいませんでした';
+        case 'dawn': return d.deaths.length ? '朝：' + names(view, d.deaths) + ' が、変わり果てた姿で見つかりました' : '朝：昨夜は、誰も命を落とさずに済みました';
+        case 'powerWordGiven': {
+          var ids = Object.keys(d.words);
+          var mine = d.shared || (ids.length === 1 && view.viewer === ids[0]);
+          if (mine) return (d.shared ? '今夜のパワーワード' : 'あなたのパワーワード') + '：「' + d.words[ids[0]].text + '」';
+          return 'パワーワード：' + ids.map(function (id) { return nameOf(view, id) + ' →「' + d.words[id].text + '」'; }).join('、');
+        }
+        case 'powerWordReveal':
+          return (d.final ? '最後に配られていたパワーワード：' : '昨日の人狼のパワーワード：') + d.words.map(function (w) { return '「' + w.text + '」'; }).join('');
         case 'dayStart': return null;
         case 'voteStart': return d.runoff ? '決選投票：' + names(view, d.candidates) : null;
         case 'voteResult': {
@@ -83,10 +91,10 @@
 
     var script = {
       revealGM: '役職を配ります。スマホを順番に回して、自分の役職だけを確認してください。',
-      nightStart: '夜になりました。全員目を閉じて、顔を伏せてください。',
-      nightEnd: '朝になりました。全員顔を上げてください。',
-      dayStart: '話し合いを始めてください。',
-      voteStart: '投票の時間です。「せーの」で、処刑したい人を一斉に指差してください。',
+      nightStart: '夜が来ました。灯りを消して、全員目を閉じ、顔を伏せてください。',
+      nightEnd: '夜が明けました。全員、顔を上げてください。',
+      dayStart: '話し合いを始めてください。この中に、人ではないものが紛れています。',
+      voteStart: '投票の時間です。「せーの」で、人狼だと思う人を指差してください。',
     };
 
     return {

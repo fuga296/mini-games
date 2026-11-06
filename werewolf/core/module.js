@@ -17,6 +17,8 @@
     engine: '../core/engine.js',
     session: '../core/session.js',
     standard: '../rules/standard.js',
+    powerWords: '../rules/powerwords.js',
+    powerword: '../rules/powerword.js',
     textJa: '../ui/text-ja.js',
   };
   function define(name, deps, factory) {
