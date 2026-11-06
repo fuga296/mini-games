@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg: #14161c; --panel: #1f232c; --line: #3a4150; --text: #e8ebf1; --sub: #9aa3b5;
-    --accent: #ffcc33; --goal: #3ddc84; --spike: #ff4d5e; --wall: #59627a; --ball: #ffffff;
+    --accent: #ffcc33; --goal: #3ddc84; --spike: #ff4d5e;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -22,14 +22,17 @@
 
   /* メニュー */
   #menu, #settings { overflow-y: auto; touch-action: pan-y; padding: 16px; align-items: center; }
-  .wrap { width: 100%; max-width: 520px; }
+  .wrap { width: 100%; max-width: 520px; padding-bottom: 40px; }
   h1 { margin: 8px 0 4px; font-size: 28px; letter-spacing: .05em; }
   h1 span { color: var(--accent); }
-  .lead { color: var(--sub); margin: 0 0 16px; font-size: 14px; line-height: 1.6; }
-  .stage-btn { display: flex; width: 100%; text-align: left; align-items: center; gap: 12px; margin-bottom: 10px; padding: 12px 14px; }
-  .stage-btn .no { font-size: 22px; font-weight: 800; color: var(--accent); width: 28px; text-align: center; }
-  .stage-btn .body { flex: 1; }
+  .lead { color: var(--sub); margin: 0 0 12px; font-size: 14px; line-height: 1.6; }
+  .progress { color: var(--goal); font-size: 13px; margin: 0 0 12px; }
+  .group { margin: 18px 0 8px; font-size: 13px; color: var(--accent); letter-spacing: .1em; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  .stage-btn { display: flex; width: 100%; text-align: left; align-items: center; gap: 12px; margin-bottom: 8px; padding: 10px 14px; }
+  .stage-btn .no { font-size: 20px; font-weight: 800; color: var(--accent); width: 30px; text-align: center; }
+  .stage-btn .body { flex: 1; min-width: 0; }
   .stage-btn .name { font-weight: 700; }
+  .stage-btn .name i { font-style: normal; color: var(--spike); font-size: 11px; margin-left: 6px; letter-spacing: -1px; }
   .stage-btn .desc { color: var(--sub); font-size: 12px; margin-top: 2px; }
   .stage-btn .best { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--goal); white-space: nowrap; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
@@ -54,6 +57,9 @@
   canvas { display: block; background: #0d0f14; border: 1px solid var(--line); border-radius: 8px; }
   #pad { display: none; width: 100%; max-width: 520px; padding: 6px 12px calc(10px + env(safe-area-inset-bottom)); }
   body.touch #pad { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 8px; height: 150px; }
+  body.touch #pad.one .pbtn:not([data-k="U"]) { display: none; }
+  body.touch #pad.one .pbtn[data-k="U"] { grid-column: 1 / -1; grid-row: 1 / -1; font-size: 30px; }
+  body.touch #pad.one > div:not(.pbtn) { display: none; }
   .pbtn { display: flex; align-items: center; justify-content: center; font-size: 24px; background: var(--panel);
     border: 1px solid var(--line); border-radius: 14px; touch-action: none; }
   .pbtn.down { background: var(--accent); color: #222; }
@@ -77,6 +83,7 @@
   <div class="wrap">
     <h1>鬼<span>操作</span>力ゲーム</h1>
     <p class="lead">玉をゴール(緑の円)まで運ぶだけ。<br>ただし、ステージごとに操作方法がおかしくなります。赤いトゲに触れるとスタートに戻されます。</p>
+    <p class="progress" id="progress"></p>
     <div id="stageList"></div>
     <div class="row">
       <button id="btnSettings">⚙ 設定</button>
@@ -90,7 +97,7 @@
 <section id="settings" class="screen">
   <div class="wrap">
     <h1>設定</h1>
-    <p class="lead">各ステージの数値を変えられます。既定値から変えている間は、クリアタイムを記録しません(公平のため)。</p>
+    <p class="lead">各ステージの数値を変えられます(0 で無効になる項目もあります)。既定値から変えている間は、クリアタイムを記録しません(公平のため)。</p>
     <div id="settingList"></div>
     <div class="row">
       <button class="primary" id="btnSetBack">保存して戻る</button>
@@ -108,7 +115,7 @@
     <button id="btnRetry" aria-label="やり直し">↺</button>
   </div>
   <div id="stageArea"><canvas id="cv"></canvas></div>
-  <div id="keyhint">移動: ←↑↓→ / WASD ・ やり直し: R ・ メニュー: Esc</div>
+  <div id="keyhint"></div>
   <div id="pad">
     <div></div><div class="pbtn" data-k="U">▲</div><div></div>
     <div class="pbtn" data-k="L">◀</div><div class="pbtn" data-k="D">▼</div><div class="pbtn" data-k="R">▶</div>
@@ -129,75 +136,174 @@ const CONFIG = {
   goalRadius: 26,
 };
 
-// 設定画面に出す項目の説明
+// 設定画面に出す項目の説明 [名前, 単位・説明]
 const PARAM_LABELS = {
-  speed:      ['速さ', '入力1あたりの速度 (px/秒)'],
-  accel:      ['加速度', '入力1あたりの加速度 (px/秒²)'],
-  jerk:       ['躍度', '入力1あたりの加速度の変化率 (px/秒³)'],
+  speed:      ['速さ', 'px/秒'],
+  accel:      ['加速度', '入力1あたり px/秒²'],
+  jerk:       ['躍度', '入力1あたり px/秒³'],
+  snap:       ['スナップ(躍度の変化)', '入力1あたり px/秒⁴'],
   maxSpeed:   ['最高速度', 'px/秒'],
   maxAccel:   ['最大加速度', 'px/秒²'],
-  friction:   ['摩擦', '1秒あたりの減速率 (0で永久に滑る)'],
-  accelDecay: ['加速度の減衰', '1秒あたり (0で保持)'],
-  delay:      ['入力遅延', 'ミリ秒'],
-  rotSpeed:   ['入力の回転速度', '度/秒'],
+  maxJerk:    ['最大躍度', 'px/秒³'],
+  friction:   ['摩擦', '1秒あたりの減速率(0で永久に滑る)'],
+  accelDecay: ['加速度の減衰', '1秒あたり(0で保持)'],
+  jerkDecay:  ['躍度の減衰', '1秒あたり(0で保持)'],
+  delay:      ['入力遅延', 'ミリ秒(0で無効)'],
+  rotSpeed:   ['入力の回転速度', '度/秒(0で無効)'],
+  turn:       ['旋回速度', '度/秒'],
+  thrust:     ['推力', 'px/秒²'],
+  spin:       ['自動回転', '度/秒'],
+  kick:       ['1回の押し出し', 'px/秒'],
+  maxKick:    ['最大発射速度', 'px/秒(フル溜め)'],
+  chargeTime: ['フル溜めの時間', '秒'],
+  k:          ['ばね定数', '大きいほど強く引く'],
+  damp:       ['ばねの減衰', '小さいほどビヨンビヨン'],
+  gravity:    ['重力', 'px/秒²(0で無効)'],
+  gravFlip:   ['重力が反転する間隔', '秒(0で反転しない)'],
+  drift:      ['風の強さ', 'px/秒(0で無効)'],
+  driftRot:   ['風向きの回転', '度/秒'],
+  drunk:      ['ふらつきの大きさ', '度(0で無効)'],
+  drunkRate:  ['ふらつきの頻度', '回/秒'],
+  stamina:    ['連続で使える時間', '秒(0で無効)'],
+  recover:    ['回復にかかる時間', '秒'],
+  flipEvery:  ['入力が反転する間隔', '秒(0で無効)'],
+  shuffleEvery: ['キーが入れ替わる間隔', '秒(0で無効)'],
 };
 
+const MODE_GAIN = { velocity: 'speed', accel: 'accel', jerk: 'jerk', snap: 'snap' };
+const MODE_ORDER = { accel: 2, jerk: 3, snap: 4 };
+
 /* 操作方式 mode:
-     velocity … 入力 = 速度
-     accel    … 入力 = 加速度(慣性あり)
-     jerk     … 入力 = 躍度(加速度の変化)
-   変換:
-     keymap   … 物理キー(U/D/L/R) → 論理方向 の付け替え
-     delay    … 入力が届くまでの遅延
-     rotSpeed … 入力方向が時間とともに回転
+     velocity  … 入力 = 速度                    accel … 入力 = 加速度(慣性)
+     jerk      … 入力 = 躍度                    snap  … 入力 = 躍度の変化(4階微分)
+     ship      … 左右で旋回、↑で推進(戦車・宇宙船)
+     autorun   … 勝手に前進し続ける。左右で舵を切るだけ
+     onebutton … 向きが勝手に回り続ける。ボタンは「推進」だけ
+     impulse   … 押した瞬間にだけ弾かれる(連打)
+     charge    … 方向キーを押している間溜めて、離すと発射
+     spring    … 操作するのは「ひもの端」。玉はばねで引っ張られてくる
+   入力の加工(どのモードにも重ねられる):
+     keymap / shuffleEvery / flipEvery / rotSpeed / drunk / delay / stamina
+   環境: gravity / gravFlip / drift / driftRot、盤面: zones / wrap / 動くトゲ / 複数の玉
 */
+const KEYMAP_ROT = { U: [1, 0], R: [0, 1], D: [-1, 0], L: [0, -1] };
+const START_BL = [60, 540];
+const ZZ = [[0, 430, 280, 20], [120, 290, 280, 20], [0, 150, 280, 20]];   // ジグザグ3段(定番レイアウト)
+
 const STAGES = [
-  {
-    name: 'あべこべ',
-    desc: '方向キーが全部ずれている',
-    hint: '↑で右、→で下、↓で左、←で上へ動く',
-    ctrl: { mode: 'velocity', speed: 150 },
-    keymap: { U: [1, 0], R: [0, 1], D: [-1, 0], L: [0, -1] },
+  /* ---------- 基礎編 ---------- */
+  { group: '基礎編', star: 2, name: 'あべこべ', desc: '方向キーが全部ずれている', hint: '↑で右、→で下、↓で左、←で上へ動く',
+    ctrl: { mode: 'velocity', speed: 150 }, keymap: KEYMAP_ROT,
     start: [60, 540], goal: [340, 70],
     walls: [[0, 380, 280, 20], [120, 210, 280, 20]],
-    spikes: [[270, 470, 130, 20], [0, 300, 60, 20]],
-  },
-  {
-    name: '氷の上',
-    desc: '入力は加速度。止まれない',
-    hint: '押すと加速するだけ。止まるには逆に押す',
+    spikes: [[270, 470, 130, 20], [0, 300, 60, 20]] },
+  { star: 3, name: '氷の上', desc: '入力は加速度。止まれない', hint: '押すと加速するだけ。止まるには逆に押す',
     ctrl: { mode: 'accel', accel: 220, maxSpeed: 320, friction: 0.25 },
     start: [60, 540], goal: [340, 540],
     walls: [[190, 160, 20, 440]],
-    spikes: [[160, 0, 80, 40], [0, 250, 40, 60], [360, 250, 40, 60]],
-  },
-  {
-    name: '遅れて届く',
-    desc: '入力が少し遅れて届く',
-    hint: '操作は約0.7秒後に反映される',
+    spikes: [[160, 0, 80, 40], [0, 250, 40, 60], [360, 250, 40, 60]] },
+  { star: 3, name: '遅れて届く', desc: '入力が少し遅れて届く', hint: '操作は約0.7秒後に反映される',
     ctrl: { mode: 'velocity', speed: 160, delay: 700 },
     start: [60, 560], goal: [60, 60],
     walls: [[0, 450, 290, 20], [110, 310, 290, 20], [0, 170, 290, 20]],
-    spikes: [[370, 380, 30, 30], [0, 240, 30, 30], [370, 100, 30, 30]],
-  },
-  {
-    name: '回る世界',
-    desc: '入力の向きがぐるぐる回る',
-    hint: '左上の矢印が「↑キーで進む向き」。それが回り続ける',
+    spikes: [[370, 380, 30, 30], [0, 240, 30, 30], [370, 100, 30, 30]] },
+  { star: 3, name: '回る世界', desc: '入力の向きがぐるぐる回る', hint: '左上の矢印が「↑キーで進む向き」。それが回り続ける',
     ctrl: { mode: 'velocity', speed: 150, rotSpeed: 45 },
-    start: [200, 550], goal: [200, 60],
-    walls: [],
-    spikes: [[0, 400, 140, 24], [260, 400, 140, 24], [90, 250, 220, 24], [0, 130, 130, 24], [270, 130, 130, 24]],
-  },
-  {
-    name: '躍度',
-    desc: '入力は加速度の「変化」',
-    hint: '押すと加速度が増える。離しても加速度は残る',
+    start: [200, 550], goal: [200, 60], walls: [],
+    spikes: [[0, 400, 140, 24], [260, 400, 140, 24], [90, 250, 220, 24], [0, 130, 130, 24], [270, 130, 130, 24]] },
+  { star: 4, name: '躍度', desc: '入力は加速度の「変化」', hint: '押すと加速度が増える。離しても加速度は残る',
     ctrl: { mode: 'jerk', jerk: 400, maxAccel: 260, maxSpeed: 300, friction: 0.4, accelDecay: 0 },
     start: [60, 540], goal: [330, 110],
-    walls: [[0, 320, 240, 20]],
-    spikes: [[300, 320, 100, 20]],
-  },
+    walls: [[0, 320, 240, 20]], spikes: [[300, 320, 100, 20]] },
+
+  /* ---------- 入力いじり編 ---------- */
+  { group: '入力いじり編', star: 3, name: 'シャッフル', desc: 'キーの割り当てが定期的に入れ替わる', hint: '4秒ごとに↑↓←→の意味がランダムに変わる(左下に現在の割り当て)',
+    ctrl: { mode: 'velocity', speed: 160, shuffleEvery: 4 },
+    start: START_BL, goal: [340, 60], walls: ZZ,
+    spikes: [[150, 500, 60, 18], [300, 330, 100, 18]] },
+  { star: 3, name: '気まぐれ反転', desc: '入力が時々、逆になる', hint: '2.5秒ごとに全部逆向きに(「反転中」の表示が出る)',
+    ctrl: { mode: 'velocity', speed: 150, flipEvery: 2.5 },
+    start: START_BL, goal: [340, 60], walls: ZZ,
+    spikes: [[300, 330, 100, 18]] },
+  { star: 3, name: '酔っ払い', desc: '入力の向きがふらふらぶれる', hint: '押した方向が、ランダムにずれ続ける',
+    ctrl: { mode: 'velocity', speed: 150, drunk: 60, drunkRate: 1 },
+    start: START_BL, goal: [340, 60], walls: ZZ,
+    spikes: [[300, 330, 100, 18]] },
+  { star: 3, name: 'スタミナ切れ', desc: '加速度操作。しかも息切れする', hint: '押し続けると約1.2秒で息切れ。しばらく操作不能(下のバー)',
+    ctrl: { mode: 'accel', accel: 300, maxSpeed: 280, friction: 0.3, stamina: 1.2, recover: 1.2 },
+    start: [60, 540], goal: [340, 540],
+    walls: [[190, 150, 20, 450]], spikes: [[150, 0, 100, 20]] },
+  { star: 3, name: 'ゾーン', desc: '通る場所ごとに操作が変わる', hint: '下から: ハヤイ → 反転 → 縦横入替 → ノロノロ',
+    ctrl: { mode: 'velocity', speed: 150 },
+    start: [60, 565], goal: [340, 40], walls: [],
+    zones: [[0, 450, 400, 90, 'fast'], [0, 330, 400, 90, 'invert'], [0, 210, 400, 90, 'swap'], [0, 90, 400, 90, 'slow']],
+    spikes: [[0, 300, 70, 18], [330, 180, 70, 18], [330, 420, 70, 18]] },
+
+  /* ---------- 乗り物編 ---------- */
+  { group: '乗り物編', star: 3, name: 'ヘビ', desc: '勝手に前進。舵しか切れない', hint: '←→で向きを変えるだけ。↑で加速、↓で減速',
+    keys: '←→: 舵 ・ ↑: 加速 ・ ↓: 減速',
+    ctrl: { mode: 'autorun', speed: 130, turn: 130 },
+    start: [200, 550], goal: [340, 70],
+    walls: [[0, 400, 260, 20], [140, 220, 260, 20]], spikes: [[0, 100, 100, 18]] },
+  { star: 3, name: '戦車', desc: '左右は旋回、↑は前進', hint: '←→でその場で向きを変え、↑で進む',
+    keys: '←→: 旋回 ・ ↑: 前進 ・ ↓: 後退',
+    ctrl: { mode: 'ship', thrust: 900, friction: 6, turn: 110, maxSpeed: 200 },
+    start: START_BL, goal: [340, 60], walls: ZZ, spikes: [[300, 330, 100, 18]] },
+  { star: 4, name: '宇宙船', desc: '旋回して噴射。慣性で流れる', hint: '←→で旋回、↑で噴射。ほとんど減速しない',
+    keys: '←→: 旋回 ・ ↑: 噴射',
+    ctrl: { mode: 'ship', thrust: 230, friction: 0.35, turn: 140, maxSpeed: 300 },
+    start: START_BL, goal: [340, 70],
+    walls: [[0, 300, 250, 20]], spikes: [[330, 200, 70, 18], [150, 100, 100, 18], [0, 500, 80, 18]] },
+  { star: 4, name: 'ワンボタン', desc: 'ボタンは1つ。向きは勝手に回る', hint: '玉の向きがぐるぐる回る。ボタンを押している間だけ噴射',
+    keys: 'Space(または任意の方向キー): 噴射',
+    ctrl: { mode: 'onebutton', spin: 90, thrust: 280, friction: 1.4, maxSpeed: 220 },
+    start: [200, 540], goal: [200, 60],
+    walls: [[120, 260, 160, 20]], spikes: [[0, 380, 90, 18], [310, 380, 90, 18], [0, 120, 70, 18], [330, 120, 70, 18]] },
+
+  /* ---------- ひとクセ編 ---------- */
+  { group: 'ひとクセ編', star: 3, name: '連打', desc: '押した瞬間だけ弾かれる', hint: '長押ししても意味なし。ポチポチ連打して進む',
+    keys: '方向キーを連打(押し続けても進まない)',
+    ctrl: { mode: 'impulse', kick: 140, friction: 1.5, maxSpeed: 280 },
+    start: START_BL, goal: [340, 60], walls: ZZ, spikes: [[300, 330, 100, 18]] },
+  { star: 4, name: 'パチンコ', desc: '溜めて、離して、発射', hint: '方向キーを押している間パワーが溜まり、離すと発射',
+    keys: '方向キーを押して溜める → 離して発射',
+    ctrl: { mode: 'charge', maxKick: 560, chargeTime: 1, friction: 1.1 },
+    start: START_BL, goal: [340, 100],
+    walls: [[100, 360, 300, 20]], spikes: [[330, 470, 70, 18], [0, 250, 80, 18]] },
+  { star: 4, name: 'ひも', desc: '動かすのは玉ではなく「ひもの端」', hint: '白い輪が操作する点。玉はばねで引っ張られて、ビヨンビヨン揺れる',
+    ctrl: { mode: 'spring', speed: 170, k: 28, damp: 3.2 },
+    start: START_BL, goal: [340, 60], walls: ZZ, spikes: [[300, 330, 100, 18]] },
+  { star: 3, name: '重力', desc: '常に落ちる。↑で踏ん張る', hint: '下向きの重力あり。落ちるとトゲの床',
+    ctrl: { mode: 'accel', accel: 360, gravity: 150, friction: 0.4, maxSpeed: 300 },
+    start: START_BL, goal: [340, 70],
+    walls: [[0, 420, 260, 20], [140, 250, 260, 20]], spikes: [[120, 575, 160, 25]] },
+  { star: 4, name: '重力反転', desc: '重力が上下に切り替わる', hint: '2.5秒ごとに重力が逆転。天井にも床にもトゲ',
+    ctrl: { mode: 'accel', accel: 300, gravity: 140, gravFlip: 2.5, friction: 0.4, maxSpeed: 300 },
+    start: [60, 300], goal: [340, 300],
+    walls: [[190, 0, 20, 230], [190, 370, 20, 230]], spikes: [[120, 578, 150, 22], [120, 0, 150, 22]] },
+  { star: 3, name: '風', desc: '風向きが回りながら吹き続ける', hint: '右上の矢印が風向き。何もしなくても流される',
+    ctrl: { mode: 'velocity', speed: 130, drift: 85, driftRot: 40 },
+    start: [200, 550], goal: [200, 60],
+    walls: [[100, 380, 200, 20], [0, 200, 130, 20], [270, 200, 130, 20]],
+    spikes: [[0, 470, 70, 18], [330, 470, 70, 18], [160, 290, 80, 18]] },
+  { star: 3, name: 'ワープ', desc: '画面の端がつながっていて、操作は全部逆', hint: '壁は横いっぱい。上下の端のすき間(トゲの切れ目)から反対側へ抜ける。↑で下、←で右…',
+    ctrl: { mode: 'velocity', speed: 150 }, keymap: { U: [0, 1], D: [0, -1], L: [1, 0], R: [-1, 0] }, wrap: true,
+    start: [60, 540], goal: [340, 70], walls: [[0, 290, 400, 20]],
+    spikes: [[0, 0, 150, 18], [250, 0, 150, 18], [0, 582, 150, 18], [250, 582, 150, 18], [150, 420, 100, 18]] },
+
+  /* ---------- 変態編 ---------- */
+  { group: '変態編', star: 5, name: 'ふたご', desc: '玉が2つ。片方は左右が逆', hint: '白は普通、水色は左右が逆に動く。両方同時にゴールへ',
+    ctrl: { mode: 'velocity', speed: 150 },
+    balls: [{ start: [60, 540], goal: [340, 70] }, { start: [340, 540], goal: [60, 70], mirror: [-1, 1] }],
+    walls: [[0, 400, 180, 20], [220, 250, 180, 20]], spikes: [[170, 100, 60, 18]] },
+  { star: 5, name: 'スナップ', desc: '入力は躍度の変化(4階微分)', hint: '押しても、加速度すら直接は変わらない。先読みが全て',
+    ctrl: { mode: 'snap', snap: 1500, maxJerk: 800, maxAccel: 220, maxSpeed: 260, friction: 0.5, accelDecay: 1.2, jerkDecay: 2 },
+    start: [200, 540], goal: [200, 60], walls: [],
+    spikes: [[0, 300, 120, 18], [280, 300, 120, 18]] },
+  { star: 5, name: 'ミックス', desc: 'あべこべ + 遅延 + 回転', hint: 'ここまでの技の合わせ技。覚悟はいいか',
+    ctrl: { mode: 'velocity', speed: 150, delay: 350, rotSpeed: 20 }, keymap: KEYMAP_ROT,
+    start: [200, 550], goal: [200, 60], walls: [],
+    spikes: [[0, 400, 130, 24], [270, 400, 130, 24], [100, 250, 200, 24], [0, 130, 120, 24], [280, 130, 120, 24]] },
 ];
 const DEFAULT_CTRL = STAGES.map(s => JSON.parse(JSON.stringify(s.ctrl)));
 
@@ -208,7 +314,7 @@ const LS_REC = 'oniControl.records.v1';
 const LS_SET = 'oniControl.settings.v1';
 function lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
-let records = lsGet(LS_REC, {});          // { stageIndex: bestMs }
+let records = lsGet(LS_REC, {});          // { ステージ番号(0始まり): 自己ベストms }
 (function loadSettings() {
   const saved = lsGet(LS_SET, null);
   if (!saved) return;
@@ -231,15 +337,18 @@ function fmt(ms) { return (ms / 1000).toFixed(2); }
 function renderMenu() {
   const list = $('stageList'); list.innerHTML = '';
   STAGES.forEach((s, i) => {
+    if (s.group) { const h = document.createElement('div'); h.className = 'group'; h.textContent = s.group; list.appendChild(h); }
     const b = document.createElement('button'); b.className = 'stage-btn';
     const best = records[i] != null ? '🏁 ' + fmt(records[i]) + '秒' : '—';
-    b.innerHTML = `<div class="no">${i + 1}</div><div class="body"><div class="name">${s.name}</div><div class="desc">${s.desc}</div></div><div class="best">${best}</div>`;
+    b.innerHTML = `<div class="no">${i + 1}</div><div class="body"><div class="name">${s.name}<i>${'★'.repeat(s.star || 1)}</i></div><div class="desc">${s.desc}</div></div><div class="best">${best}</div>`;
     b.onclick = () => startStage(i);
     list.appendChild(b);
   });
+  const done = STAGES.filter((_, i) => records[i] != null).length;
+  $('progress').textContent = `クリア済み ${done} / ${STAGES.length}`;
   $('menuNote').textContent = isModified()
     ? '※ 設定を既定値から変えているため、いまはクリアタイムを記録しません。'
-    : 'クリアタイムはこの端末のブラウザ内にだけ保存されます。';
+    : 'クリアタイムはこの端末のブラウザ内にだけ保存されます。★は鬼度の目安です。';
   show('menu');
 }
 
@@ -280,15 +389,18 @@ $('btnResetRec').onclick = () => {
 };
 
 /* =====================================================================
-   入力(物理方向 U/D/L/R として扱い、ステージ側で意味を付け替える)
+   入力(物理方向 U/D/L/R として扱い、ステージ側で意味を付け替える。S = Space)
    ===================================================================== */
-const held = { U: false, D: false, L: false, R: false };
-const KEYS = { ArrowUp: 'U', KeyW: 'U', ArrowDown: 'D', KeyS: 'D', ArrowLeft: 'L', KeyA: 'L', ArrowRight: 'R', KeyD: 'R' };
+const KEYS4 = ['U', 'D', 'L', 'R'];
+const held = { U: false, D: false, L: false, R: false, S: false };
+const tapped = { U: false, D: false, L: false, R: false };   // 押した瞬間の取りこぼし防止(連打ステージ用)
+const KEYS = { ArrowUp: 'U', KeyW: 'U', ArrowDown: 'D', KeyS: 'D', ArrowLeft: 'L', KeyA: 'L', ArrowRight: 'R', KeyD: 'R', Space: 'S' };
 const PHYS_VEC = { U: [0, -1], D: [0, 1], L: [-1, 0], R: [1, 0] };
 window.addEventListener('keydown', e => {
-  if (KEYS[e.code]) { held[KEYS[e.code]] = true; e.preventDefault(); }
+  const k = KEYS[e.code];
+  if (k) { if (!held[k] && tapped[k] === false) tapped[k] = true; held[k] = true; e.preventDefault(); }
   if (!$('game').classList.contains('on')) return;
-  if (e.code === 'KeyR' || e.code === 'Space') { e.preventDefault(); startStage(game.idx); }
+  if (e.code === 'KeyR') { e.preventDefault(); startStage(game.idx); }
   if (e.code === 'Escape') { stopGame(); renderMenu(); }
   if (e.code === 'Enter' && game.cleared) { e.preventDefault(); nextStage(); }
 });
@@ -299,8 +411,10 @@ window.addEventListener('blur', () => { for (const k in held) held[k] = false; }
 const touchOwner = new Map(); // pointerId -> key
 function padKeyAt(x, y) { const el = document.elementFromPoint(x, y); return el && el.classList.contains('pbtn') ? el.dataset.k : null; }
 function refreshPad() {
-  for (const k in held) if (['U', 'D', 'L', 'R'].includes(k)) held[k] = false;
+  const before = { ...held };
+  for (const k of KEYS4) held[k] = false;
   for (const k of touchOwner.values()) if (k) held[k] = true;
+  for (const k of KEYS4) if (held[k] && !before[k]) tapped[k] = true;
   document.querySelectorAll('.pbtn').forEach(b => b.classList.toggle('down', held[b.dataset.k]));
 }
 const pad = $('pad');
@@ -316,6 +430,8 @@ window.addEventListener('touchstart', () => { if (!document.body.classList.conta
 const cv = $('cv'), ctx = cv.getContext('2d');
 let scale = 1;
 const game = { idx: 0, running: false, raf: 0 };
+let trails = [];
+const D2R = Math.PI / 180;
 
 function resize() {
   const area = $('stageArea').getBoundingClientRect();
@@ -328,24 +444,41 @@ function resize() {
 }
 window.addEventListener('resize', () => { if (game.running) resize(); });
 
+function ballSpecs(s) { return s.balls || [{ start: s.start, goal: s.goal }]; }
+function newBall(spec, s) {
+  return { x: spec.start[0], y: spec.start[1], vx: 0, vy: 0, ax: 0, ay: 0, jx: 0, jy: 0,
+           hd: (s.heading0 !== undefined ? s.heading0 : -90) * D2R, anc: [spec.start[0], spec.start[1]], chg: 0, aim: [0, -1] };
+}
+function resetBalls(g) {
+  g.balls = ballSpecs(g.s).map(sp => newBall(sp, g.s));
+  g.buf = []; g.dl = [0, 0, false];
+  trails = g.balls.map(() => []);
+}
+
 function startStage(i) {
   stopGame();
   const s = STAGES[i];
   Object.assign(game, {
     idx: i, s, c: s.ctrl, running: true, cleared: false,
-    x: s.start[0], y: s.start[1], vx: 0, vy: 0, ax: 0, ay: 0,
-    t: 0, timerOn: false, elapsed: 0, angle: 0, buf: [], delayed: [0, 0], trail: [], deaths: 0, flash: 0,
+    t: 0, ct: 0, timerOn: false, elapsed: 0, deaths: 0, flash: 0,
+    map: null, shufN: 0, shufAt: -9, flipped: false, angle: 0, dAng: 0, dTarget: 0, dNext: 0,
+    en: 1, exh: false, seed: (Math.random() * 4294967296) | 0,
+    prev: { U: false, D: false, L: false, R: false },
   });
+  resetBalls(game);
   $('stName').textContent = `STAGE ${i + 1}: ${s.name}`;
   $('stHint').textContent = s.hint;
+  $('keyhint').textContent = s.keys || '移動: ←↑↓→ / WASD ・ やり直し: R ・ メニュー: Esc';
+  const one = s.ctrl.mode === 'onebutton';
+  $('pad').classList.toggle('one', one);
+  document.querySelector('.pbtn[data-k="U"]').textContent = one ? '押す' : '▲';
   $('overlay').classList.remove('on');
   show('game'); resize();
   let last = performance.now();
   const loop = now => {
     if (!game.running) return;
-    let dt = Math.min(0.05, (now - last) / 1000); last = now;
-    const steps = 4;
-    for (let k = 0; k < steps; k++) update(dt / steps);
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    for (let k = 0; k < 4; k++) update(dt / 4);
     draw();
     game.raf = requestAnimationFrame(loop);
   };
@@ -353,96 +486,199 @@ function startStage(i) {
 }
 function stopGame() { game.running = false; cancelAnimationFrame(game.raf); }
 
-// 物理キー → 論理入力ベクトル
-function rawInput() {
-  const s = game.s; let x = 0, y = 0;
-  for (const k of ['U', 'D', 'L', 'R']) if (held[k]) {
-    const v = (s.keymap && s.keymap[k]) || PHYS_VEC[k]; x += v[0]; y += v[1];
-  }
-  const m = Math.hypot(x, y); if (m > 1) { x /= m; y /= m; }
-  return [x, y];
+// 決定的な乱数(状態は game.seed に持つので、先読みのシミュレーションでも複製できる)
+function rnd(g) {
+  g.seed = (g.seed + 0x6D2B79F5) | 0;
+  let t = Math.imul(g.seed ^ (g.seed >>> 15), 1 | g.seed);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 }
-
-function update(dt) {
-  const g = game, c = g.c;
-  if (g.cleared) return;
-  g.t += dt;
-  let [ix, iy] = rawInput();
-  if (!g.timerOn && (ix || iy)) g.timerOn = true;
-  if (g.timerOn) g.elapsed += dt * 1000;
-
-  // 回転: 入力方向を時間とともに回す
-  if (c.rotSpeed) {
-    g.angle = (g.t * c.rotSpeed) * Math.PI / 180;
-    const cs = Math.cos(g.angle), sn = Math.sin(g.angle);
-    [ix, iy] = [ix * cs - iy * sn, ix * sn + iy * cs];
-  }
-  // 遅延: 入力を記録し、delay ミリ秒前の値を使う
-  if (c.delay) {
-    g.buf.push([g.t, ix, iy]);
-    const tgt = g.t - c.delay / 1000;
-    while (g.buf.length && g.buf[0][0] <= tgt) { g.delayed = [g.buf[0][1], g.buf[0][2]]; g.buf.shift(); }
-    [ix, iy] = g.delayed;
-  }
-  g.inX = ix; g.inY = iy;
-
-  if (c.mode === 'velocity') {
-    g.vx = ix * c.speed; g.vy = iy * c.speed;
-  } else if (c.mode === 'accel') {
-    g.ax = ix * c.accel; g.ay = iy * c.accel;
-    g.vx += g.ax * dt; g.vy += g.ay * dt;
-  } else if (c.mode === 'jerk') {
-    g.ax += ix * c.jerk * dt; g.ay += iy * c.jerk * dt;
-    if (c.accelDecay) { const f = Math.exp(-c.accelDecay * dt); g.ax *= f; g.ay *= f; }
-    const am = Math.hypot(g.ax, g.ay); if (am > c.maxAccel) { g.ax *= c.maxAccel / am; g.ay *= c.maxAccel / am; }
-    g.vx += g.ax * dt; g.vy += g.ay * dt;
-  }
-  if (c.mode !== 'velocity') {
-    const f = Math.exp(-(c.friction || 0) * dt); g.vx *= f; g.vy *= f;
-    const vm = Math.hypot(g.vx, g.vy); if (c.maxSpeed && vm > c.maxSpeed) { g.vx *= c.maxSpeed / vm; g.vy *= c.maxSpeed / vm; }
-  }
-  g.x += g.vx * dt; g.y += g.vy * dt;
-  collide();
-
-  // トゲ
-  const r = CONFIG.ballRadius;
-  for (const sp of g.s.spikes) if (circleRect(g.x, g.y, r * 0.85, sp)) { respawn(); return; }
-  // ゴール
-  const gd = Math.hypot(g.x - g.s.goal[0], g.y - g.s.goal[1]);
-  if (gd < CONFIG.goalRadius - r * 0.3) clear();
+function randomMap(g) {
+  const base = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  let p;
+  do { p = base.slice(); for (let i = 3; i > 0; i--) { const j = Math.floor(rnd(g) * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; } }
+  while (p.every((v, i) => v[0] === base[i][0] && v[1] === base[i][1]));
+  return { U: p[0], R: p[1], D: p[2], L: p[3] };
 }
+function mapVec(g, k) { const m = g.map || g.s.keymap; return (m && m[k]) || PHYS_VEC[k]; }
 
+function spikeRect(sp, t) {   // [x,y,w,h, 揺れ幅x, 揺れ幅y, 周期秒, 位相]
+  if (!sp[6]) return sp;
+  const o = Math.sin(t * 2 * Math.PI / sp[6] + (sp[7] || 0));
+  return [sp[0] + (sp[4] || 0) * o, sp[1] + (sp[5] || 0) * o, sp[2], sp[3]];
+}
 function circleRect(cx, cy, r, [x, y, w, h]) {
   const nx = Math.max(x, Math.min(cx, x + w)), ny = Math.max(y, Math.min(cy, y + h));
   return (cx - nx) ** 2 + (cy - ny) ** 2 < r * r;
 }
+function zoneAt(g, b) {
+  const zs = g.s.zones; if (!zs) return null;
+  for (const z of zs) if (b.x >= z[0] && b.x <= z[0] + z[2] && b.y >= z[1] && b.y <= z[1] + z[3]) return z[4];
+  return null;
+}
 
-function collide() {
+function update(dt) {
+  const g = game, c = g.c, s = g.s, mode = c.mode;
+  if (g.cleared) return;
+  g.t += dt;
+
+  // --- 物理入力 → 論理ベクトル ---
+  let rx = 0, ry = 0, act = false;
+  for (const k of KEYS4) if (held[k]) { act = true; const v = mapVec(g, k); rx += v[0]; ry += v[1]; }
+  if (held.S && mode === 'onebutton') act = true;
+  { const m = Math.hypot(rx, ry); if (m > 1) { rx /= m; ry /= m; } }
+  const pressed = [];
+  for (const k of KEYS4) { if ((held[k] && !g.prev[k]) || tapped[k]) pressed.push(k); g.prev[k] = held[k]; tapped[k] = false; }
+
+  if (!g.timerOn && act) g.timerOn = true;
+  if (g.timerOn) { g.elapsed += dt * 1000; g.ct = g.elapsed / 1000; }
+
+  // --- シャッフル / 反転 / 回転 / ふらつき ---
+  if (c.shuffleEvery > 0 && g.timerOn) {
+    const n = Math.floor(g.ct / c.shuffleEvery);
+    if (n !== g.shufN) { g.shufN = n; g.map = randomMap(g); g.shufAt = g.t; }
+  }
+  let sign = 1;
+  if (c.flipEvery > 0) { g.flipped = g.timerOn && Math.floor(g.ct / c.flipEvery) % 2 === 1; if (g.flipped) sign = -1; }
+  let ang = 0;
+  if (c.rotSpeed) { g.angle = g.t * c.rotSpeed * D2R; ang += g.angle; }
+  if (c.drunk > 0) {
+    g.dNext -= dt;
+    if (g.dNext <= 0) { g.dTarget = (rnd(g) * 2 - 1) * c.drunk; g.dNext = 1 / Math.max(0.05, c.drunkRate || 1); }
+    g.dAng += (g.dTarget - g.dAng) * (1 - Math.exp(-3 * dt));
+    ang += g.dAng * D2R;
+  }
+  const cs = Math.cos(ang), sn = Math.sin(ang);
+  const xf = (x, y) => [(x * cs - y * sn) * sign, (x * sn + y * cs) * sign];
+
+  // --- スタミナ ---
+  let lock = false;
+  if (c.stamina > 0) {
+    if (g.exh) { g.en += dt / Math.max(0.05, c.recover); if (g.en >= 0.4) g.exh = false; }
+    else if (act) { g.en -= dt / c.stamina; if (g.en <= 0) { g.en = 0; g.exh = true; } }
+    else g.en = Math.min(1, g.en + dt / Math.max(0.05, c.recover));
+    lock = g.exh;
+  }
+  let [ix, iy] = xf(rx, ry);
+  let any = act;
+  if (lock) { ix = iy = 0; any = false; }
+
+  // --- 入力遅延 ---
+  if (c.delay > 0) {
+    g.buf.push([g.t, ix, iy, any]);
+    const tgt = g.t - c.delay / 1000;
+    while (g.buf.length && g.buf[0][0] <= tgt) { const e = g.buf.shift(); g.dl = [e[1], e[2], e[3]]; }
+    [ix, iy, any] = g.dl;
+  }
+  g.inX = ix; g.inY = iy;
+  const pv = (mode === 'impulse' && !lock) ? pressed.map(k => xf(...mapVec(g, k))) : [];
+
+  // --- 玉ごとの更新 ---
+  const W = CONFIG.world.w, H = CONFIG.world.h, r = CONFIG.ballRadius;
+  const specs = ballSpecs(s);
+  const gdir = (c.gravFlip > 0 && g.timerOn && Math.floor(g.ct / c.gravFlip) % 2 === 1) ? -1 : 1;
+  for (let bi = 0; bi < g.balls.length; bi++) {
+    const b = g.balls[bi], mir = specs[bi].mirror || [1, 1];
+    let ux = ix * mir[0], uy = iy * mir[1], spd = 1, fr = 1;
+    const z = zoneAt(g, b);
+    if (z === 'invert') { ux = -ux; uy = -uy; }
+    else if (z === 'swap') { [ux, uy] = [uy, ux]; }
+    else if (z === 'slow') spd = 0.4;
+    else if (z === 'fast') spd = 2;
+    else if (z === 'ice') fr = 0.12;
+    const fric = () => { const f = Math.exp(-(c.friction || 0) * fr * dt); b.vx *= f; b.vy *= f; };
+    const clampV = () => { const vm = Math.hypot(b.vx, b.vy); if (c.maxSpeed && vm > c.maxSpeed) { b.vx *= c.maxSpeed / vm; b.vy *= c.maxSpeed / vm; } };
+    const grav = () => { if (c.gravity) b.vy += c.gravity * gdir * dt; };
+
+    if (mode === 'velocity') {
+      b.vx = ux * c.speed * spd; b.vy = uy * c.speed * spd;
+    } else if (MODE_ORDER[mode]) {
+      const order = MODE_ORDER[mode], gain = c[MODE_GAIN[mode]] * spd;
+      if (order === 2) { b.ax = ux * gain; b.ay = uy * gain; }
+      else {
+        if (order === 4) {
+          b.jx += ux * gain * dt; b.jy += uy * gain * dt;
+          const jd = Math.exp(-(c.jerkDecay || 0) * dt); b.jx *= jd; b.jy *= jd;
+          const jm = Math.hypot(b.jx, b.jy); if (c.maxJerk && jm > c.maxJerk) { b.jx *= c.maxJerk / jm; b.jy *= c.maxJerk / jm; }
+          b.ax += b.jx * dt; b.ay += b.jy * dt;
+        } else { b.ax += ux * gain * dt; b.ay += uy * gain * dt; }
+        const ad = Math.exp(-(c.accelDecay || 0) * dt); b.ax *= ad; b.ay *= ad;
+        const am = Math.hypot(b.ax, b.ay); if (c.maxAccel && am > c.maxAccel) { b.ax *= c.maxAccel / am; b.ay *= c.maxAccel / am; }
+      }
+      b.vx += b.ax * dt; b.vy += b.ay * dt; grav(); fric(); clampV();
+    } else if (mode === 'ship') {
+      b.hd += ux * c.turn * D2R * dt;
+      const f = -uy, th = f >= 0 ? f : f * 0.5;
+      b.ax = Math.cos(b.hd) * c.thrust * th * spd; b.ay = Math.sin(b.hd) * c.thrust * th * spd;
+      b.vx += b.ax * dt; b.vy += b.ay * dt; grav(); fric(); clampV();
+    } else if (mode === 'autorun') {
+      b.hd += ux * c.turn * D2R * dt;
+      const sp = c.speed * (1 - uy * 0.5) * spd;
+      b.vx = Math.cos(b.hd) * sp; b.vy = Math.sin(b.hd) * sp;
+    } else if (mode === 'onebutton') {
+      b.hd += c.spin * D2R * dt;
+      const th = any ? 1 : 0;
+      b.ax = Math.cos(b.hd) * c.thrust * th; b.ay = Math.sin(b.hd) * c.thrust * th;
+      b.vx += b.ax * dt; b.vy += b.ay * dt; grav(); fric(); clampV();
+    } else if (mode === 'impulse') {
+      for (const v of pv) { b.vx += v[0] * mir[0] * c.kick; b.vy += v[1] * mir[1] * c.kick; }
+      grav(); fric(); clampV();
+    } else if (mode === 'charge') {
+      const m = Math.hypot(ux, uy);
+      if (m > 0.1) { b.chg = Math.min(1, b.chg + dt / Math.max(0.05, c.chargeTime)); b.aim = [ux / m, uy / m]; }
+      else { if (b.chg > 0.05) { b.vx = b.aim[0] * c.maxKick * b.chg; b.vy = b.aim[1] * c.maxKick * b.chg; } b.chg = 0; }
+      grav(); fric();
+    } else if (mode === 'spring') {
+      b.anc[0] = Math.max(0, Math.min(W, b.anc[0] + ux * c.speed * spd * dt));
+      b.anc[1] = Math.max(0, Math.min(H, b.anc[1] + uy * c.speed * spd * dt));
+      b.ax = c.k * (b.anc[0] - b.x) - c.damp * b.vx; b.ay = c.k * (b.anc[1] - b.y) - c.damp * b.vy;
+      b.vx += b.ax * dt; b.vy += b.ay * dt; grav(); clampV();
+    }
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    if (c.drift > 0) { const a = (c.driftRot || 0) * g.t * D2R; b.x += Math.cos(a) * c.drift * dt; b.y += Math.sin(a) * c.drift * dt; }
+    if (s.wrap) { b.x = ((b.x % W) + W) % W; b.y = ((b.y % H) + H) % H; }
+    collide(b, !!s.wrap);
+  }
+
+  // --- トゲ / ゴール ---
+  for (const b of g.balls) for (const sp of s.spikes) if (circleRect(b.x, b.y, r * 0.85, spikeRect(sp, g.t))) { respawn(); return; }
+  let all = true;
+  g.balls.forEach((b, bi) => {
+    const gl = specs[bi].goal;
+    b.inGoal = Math.hypot(b.x - gl[0], b.y - gl[1]) < CONFIG.goalRadius - r * 0.3;
+    if (!b.inGoal) all = false;
+  });
+  if (all) clear();
+}
+
+function collide(b, wrap) {
   const g = game, r = CONFIG.ballRadius, e = CONFIG.restitution, W = CONFIG.world.w, H = CONFIG.world.h;
-  if (g.x < r) { g.x = r; g.vx = Math.abs(g.vx) * e; }
-  if (g.x > W - r) { g.x = W - r; g.vx = -Math.abs(g.vx) * e; }
-  if (g.y < r) { g.y = r; g.vy = Math.abs(g.vy) * e; }
-  if (g.y > H - r) { g.y = H - r; g.vy = -Math.abs(g.vy) * e; }
+  if (!wrap) {
+    if (b.x < r) { b.x = r; b.vx = Math.abs(b.vx) * e; }
+    if (b.x > W - r) { b.x = W - r; b.vx = -Math.abs(b.vx) * e; }
+    if (b.y < r) { b.y = r; b.vy = Math.abs(b.vy) * e; }
+    if (b.y > H - r) { b.y = H - r; b.vy = -Math.abs(b.vy) * e; }
+  }
   for (const [x, y, w, h] of g.s.walls) {
-    const nx = Math.max(x, Math.min(g.x, x + w)), ny = Math.max(y, Math.min(g.y, y + h));
-    let dx = g.x - nx, dy = g.y - ny; const d2 = dx * dx + dy * dy;
+    const nx = Math.max(x, Math.min(b.x, x + w)), ny = Math.max(y, Math.min(b.y, y + h));
+    let dx = b.x - nx, dy = b.y - ny; const d2 = dx * dx + dy * dy;
     if (d2 >= r * r) continue;
     let d = Math.sqrt(d2);
     if (d === 0) { // 中心がめり込んだ: 最短の辺へ押し出す
-      const opts = [[g.x - x, -1, 0], [x + w - g.x, 1, 0], [g.y - y, 0, -1], [y + h - g.y, 0, 1]].sort((a, b) => a[0] - b[0]);
-      dx = opts[0][1]; dy = opts[0][2]; d = 1; g.x = nx; g.y = ny;
+      const opts = [[b.x - x, -1, 0], [x + w - b.x, 1, 0], [b.y - y, 0, -1], [y + h - b.y, 0, 1]].sort((p, q) => p[0] - q[0]);
+      dx = opts[0][1]; dy = opts[0][2]; d = 1; b.x = nx; b.y = ny;
     }
     const ux = dx / d, uy = dy / d;
-    g.x = nx + ux * r; g.y = ny + uy * r;
-    const vn = g.vx * ux + g.vy * uy;
-    if (vn < 0) { g.vx -= (1 + e) * vn * ux; g.vy -= (1 + e) * vn * uy; }
+    b.x = nx + ux * r; b.y = ny + uy * r;
+    const vn = b.vx * ux + b.vy * uy;
+    if (vn < 0) { b.vx -= (1 + e) * vn * ux; b.vy -= (1 + e) * vn * uy; }
   }
 }
 
 function respawn() {
   const g = game;
-  g.x = g.s.start[0]; g.y = g.s.start[1]; g.vx = g.vy = g.ax = g.ay = 0;
-  g.buf = []; g.delayed = [0, 0]; g.deaths++; g.flash = 1; g.trail = [];
+  resetBalls(g);
+  g.deaths++; g.flash = 1;
 }
 
 function clear() {
@@ -483,58 +719,146 @@ function arrow(x, y, dx, dy, color, wdt) {
   ctx.lineTo(x + dx - ux * hs + uy * hs * 0.6, y + dy - uy * hs - ux * hs * 0.6);
   ctx.closePath(); ctx.fill();
 }
+const ZONE_STYLE = {
+  fast: ['rgba(255,204,51,.16)', 'ハヤイ ×2'], invert: ['rgba(255,77,94,.16)', '反転'],
+  swap: ['rgba(120,180,255,.16)', '縦横入替'], slow: ['rgba(61,220,132,.16)', 'ノロノロ'], ice: ['rgba(150,220,255,.2)', '氷'],
+};
+const BALL_COLORS = ['#ffffff', '#7fe3ff'];
+const GLYPH = { '0,-1': '↑', '1,0': '→', '0,1': '↓', '-1,0': '←' };
 
 function draw() {
-  const g = game, s = g.s, W = CONFIG.world.w, H = CONFIG.world.h, r = CONFIG.ballRadius;
+  const g = game, s = g.s, c = g.c, W = CONFIG.world.w, H = CONFIG.world.h, r = CONFIG.ballRadius;
+  const specs = ballSpecs(s);
   ctx.fillStyle = '#0d0f14'; ctx.fillRect(0, 0, W, H);
   ctx.strokeStyle = '#1a1e27'; ctx.lineWidth = 1;
   for (let x = 40; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
   for (let y = 40; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
 
-  // スタート
-  ctx.strokeStyle = '#3a4150'; ctx.setLineDash([4, 4]); ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(s.start[0], s.start[1], r + 6, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
-  // ゴール
+  // ゾーン
+  if (s.zones) for (const [x, y, w, h, t] of s.zones) {
+    const [col, label] = ZONE_STYLE[t];
+    ctx.fillStyle = col; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(232,235,241,.45)'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'left'; ctx.fillText(label, x + 6, y + 10); ctx.textAlign = 'center';
+  }
+  // スタート・ゴール
   const pulse = 1 + 0.08 * Math.sin(performance.now() / 200);
-  ctx.fillStyle = 'rgba(61,220,132,.18)'; ctx.strokeStyle = '#3ddc84'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.arc(s.goal[0], s.goal[1], CONFIG.goalRadius * pulse, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#3ddc84'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('GOAL', s.goal[0], s.goal[1]);
+  specs.forEach((sp, i) => {
+    ctx.strokeStyle = '#3a4150'; ctx.setLineDash([4, 4]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sp.start[0], sp.start[1], r + 6, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    const col = specs.length > 1 ? BALL_COLORS[i] : '#3ddc84', inG = g.balls[i].inGoal;
+    ctx.fillStyle = inG ? 'rgba(61,220,132,.45)' : 'rgba(61,220,132,.14)'; ctx.strokeStyle = col; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(sp.goal[0], sp.goal[1], CONFIG.goalRadius * pulse, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = col; ctx.font = 'bold 12px sans-serif'; ctx.fillText('GOAL', sp.goal[0], sp.goal[1]);
+  });
   // 壁
   ctx.fillStyle = '#59627a';
   for (const [x, y, w, h] of s.walls) ctx.fillRect(x, y, w, h);
   // トゲ(斜線)
-  for (const [x, y, w, h] of s.spikes) {
+  for (const sp of s.spikes) {
+    const [x, y, w, h] = spikeRect(sp, g.t);
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
     ctx.fillStyle = '#5a1820'; ctx.fillRect(x, y, w, h);
     ctx.strokeStyle = '#ff4d5e'; ctx.lineWidth = 3;
     for (let k = -h; k < w; k += 10) { ctx.beginPath(); ctx.moveTo(x + k, y + h); ctx.lineTo(x + k + h, y); ctx.stroke(); }
     ctx.restore();
   }
-  // 軌跡
-  g.trail.push([g.x, g.y]); if (g.trail.length > 40) g.trail.shift();
-  for (let k = 0; k < g.trail.length; k++) {
-    ctx.fillStyle = `rgba(255,204,51,${k / g.trail.length * 0.35})`;
-    ctx.beginPath(); ctx.arc(g.trail[k][0], g.trail[k][1], r * k / g.trail.length, 0, Math.PI * 2); ctx.fill();
-  }
   // 玉
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, Math.PI * 2); ctx.fill();
-  // 速度・加速度の矢印
-  arrow(g.x, g.y, g.vx * 0.25, g.vy * 0.25, 'rgba(120,180,255,.9)', 2);
-  if (g.c.mode !== 'velocity') arrow(g.x, g.y, g.ax * 0.2, g.ay * 0.2, 'rgba(255,120,200,.9)', 2);
+  g.balls.forEach((b, bi) => {
+    const col = BALL_COLORS[bi] || '#fff', tr = trails[bi] || (trails[bi] = []);
+    const last = tr[tr.length - 1];
+    if (last && Math.hypot(last[0] - b.x, last[1] - b.y) > 100) tr.length = 0;   // ワープ時は軌跡を切る
+    tr.push([b.x, b.y]); if (tr.length > 40) tr.shift();
+    for (let k = 0; k < tr.length; k++) {
+      ctx.fillStyle = `rgba(255,204,51,${k / tr.length * 0.35})`;
+      ctx.beginPath(); ctx.arc(tr[k][0], tr[k][1], r * k / tr.length, 0, Math.PI * 2); ctx.fill();
+    }
+    if (c.mode === 'spring') {   // ひも
+      ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.anc[0], b.anc[1]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.strokeStyle = '#ffcc33'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(b.anc[0], b.anc[1], 8, 0, Math.PI * 2); ctx.stroke();
+    }
+    const offs = s.wrap ? [-W, 0, W] : [0];
+    const offsY = s.wrap ? [-H, 0, H] : [0];
+    ctx.fillStyle = col;
+    for (const ox of offs) for (const oy of offsY) {
+      if (ox && Math.abs(b.x + ox - W / 2) > W / 2 + r) continue;
+      if (oy && Math.abs(b.y + oy - H / 2) > H / 2 + r) continue;
+      ctx.beginPath(); ctx.arc(b.x + ox, b.y + oy, r, 0, Math.PI * 2); ctx.fill();
+    }
+    // 向き(乗り物系)
+    if (['ship', 'autorun', 'onebutton'].includes(c.mode)) {
+      ctx.strokeStyle = '#ff4d5e'; ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + Math.cos(b.hd) * (r + 9), b.y + Math.sin(b.hd) * (r + 9)); ctx.stroke();
+    }
+    if (c.mode === 'charge') {   // 溜めゲージ + 狙い
+      if (b.chg > 0) {
+        arrow(b.x, b.y, b.aim[0] * (20 + 70 * b.chg), b.aim[1] * (20 + 70 * b.chg), 'rgba(255,204,51,.95)', 3);
+        ctx.fillStyle = '#222'; ctx.fillRect(b.x - 18, b.y + 18, 36, 6);
+        ctx.fillStyle = b.chg >= 1 ? '#ff4d5e' : '#ffcc33'; ctx.fillRect(b.x - 18, b.y + 18, 36 * b.chg, 6);
+      }
+    }
+    // 速度・加速度の矢印
+    arrow(b.x, b.y, b.vx * 0.25, b.vy * 0.25, 'rgba(120,180,255,.9)', 2);
+    if (MODE_ORDER[c.mode]) arrow(b.x, b.y, b.ax * 0.2, b.ay * 0.2, 'rgba(255,120,200,.9)', 2);
+  });
 
-  // 回転ステージ: 「↑キーで進む向き」コンパス
-  if (g.c.rotSpeed) {
+  // ---- 補助表示 ----
+  if (c.rotSpeed) {   // 「↑キーで進む向き」コンパス
     const cx = 34, cy = 34;
     ctx.fillStyle = 'rgba(31,35,44,.85)'; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.fill();
-    const a = g.angle; // ↑(0,-1) を回したもの
-    arrow(cx, cy, Math.sin(a) * 20, -Math.cos(a) * 20, '#ffcc33', 3);
+    arrow(cx, cy, Math.sin(g.angle) * 20, -Math.cos(g.angle) * 20, '#ffcc33', 3);
     ctx.fillStyle = '#9aa3b5'; ctx.font = '10px sans-serif'; ctx.fillText('↑キー', cx, cy + 36);
+  }
+  if (c.drunk > 0) {
+    const cx = 34, cy = 34, a = g.dAng * D2R;
+    ctx.fillStyle = 'rgba(31,35,44,.85)'; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.fill();
+    arrow(cx, cy, Math.sin(a) * 20, -Math.cos(a) * 20, '#ff8c5a', 3);
+    ctx.fillStyle = '#9aa3b5'; ctx.font = '10px sans-serif'; ctx.fillText('ずれ', cx, cy + 36);
+  }
+  if (c.drift > 0) {   // 風向き
+    const cx = W - 34, cy = 34, a = (c.driftRot || 0) * g.t * D2R;
+    ctx.fillStyle = 'rgba(31,35,44,.85)'; ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.fill();
+    arrow(cx - Math.cos(a) * 12, cy - Math.sin(a) * 12, Math.cos(a) * 24, Math.sin(a) * 24, '#8fd0ff', 3);
+    ctx.fillStyle = '#9aa3b5'; ctx.font = '10px sans-serif'; ctx.fillText('風', cx, cy + 36);
+  }
+  if (c.shuffleEvery > 0) {   // 現在のキー割り当て
+    const mm = { U: mapVec(g, 'U'), R: mapVec(g, 'R'), D: mapVec(g, 'D'), L: mapVec(g, 'L') };
+    const fresh = g.t - g.shufAt < 0.8;
+    ctx.fillStyle = 'rgba(31,35,44,.9)'; ctx.fillRect(4, H - 30, 168, 26);
+    ctx.strokeStyle = fresh ? '#ff4d5e' : '#3a4150'; ctx.lineWidth = fresh ? 3 : 1; ctx.strokeRect(4, H - 30, 168, 26);
+    ctx.fillStyle = fresh ? '#ffcc33' : '#e8ebf1'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(`↑→${GLYPH[mm.U]}  ↓→${GLYPH[mm.D]}  ←→${GLYPH[mm.L]}  →→${GLYPH[mm.R]}`, 10, H - 16); ctx.textAlign = 'center';
+    if (g.timerOn) {
+      const left = c.shuffleEvery - (g.ct % c.shuffleEvery);
+      ctx.fillStyle = '#222'; ctx.fillRect(4, H - 36, 168, 4); ctx.fillStyle = left < 1 ? '#ff4d5e' : '#ffcc33'; ctx.fillRect(4, H - 36, 168 * left / c.shuffleEvery, 4);
+    }
+  }
+  if (c.flipEvery > 0 && g.timerOn) {
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillStyle = g.flipped ? '#ff4d5e' : 'rgba(154,163,181,.9)';
+    ctx.fillText(g.flipped ? '⚠ 反転中!' : '通常', W / 2, 16);
+    const ph = (g.ct % c.flipEvery) / c.flipEvery;
+    ctx.fillStyle = '#222'; ctx.fillRect(W / 2 - 40, 28, 80, 4); ctx.fillStyle = g.flipped ? '#ff4d5e' : '#ffcc33'; ctx.fillRect(W / 2 - 40, 28, 80 * (1 - ph), 4);
+  }
+  if (c.stamina > 0) {
+    ctx.fillStyle = '#222'; ctx.fillRect(W / 2 - 60, H - 16, 120, 8);
+    ctx.fillStyle = g.exh ? '#ff4d5e' : '#3ddc84'; ctx.fillRect(W / 2 - 60, H - 16, 120 * g.en, 8);
+    ctx.fillStyle = '#9aa3b5'; ctx.font = '10px sans-serif'; ctx.fillText(g.exh ? '息切れ中…' : 'スタミナ', W / 2, H - 24);
+  }
+  if (c.gravity > 0) {
+    const dir = (c.gravFlip > 0 && g.timerOn && Math.floor(g.ct / c.gravFlip) % 2 === 1) ? -1 : 1;
+    ctx.fillStyle = '#9aa3b5'; ctx.font = 'bold 14px sans-serif';
+    ctx.fillText(dir > 0 ? '▼ 重力' : '▲ 重力', W - 36, 20);
+    if (c.gravFlip > 0 && g.timerOn) {
+      const ph = (g.ct % c.gravFlip) / c.gravFlip;
+      ctx.fillStyle = '#222'; ctx.fillRect(W - 66, 32, 60, 4); ctx.fillStyle = ph > 0.7 ? '#ff4d5e' : '#ffcc33'; ctx.fillRect(W - 66, 32, 60 * (1 - ph), 4);
+    }
   }
   // 凡例
   ctx.font = '10px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(120,180,255,.9)';
   ctx.fillText('青: 速度', W - 6, H - 20);
-  if (g.c.mode !== 'velocity') { ctx.fillStyle = 'rgba(255,120,200,.9)'; ctx.fillText('桃: 加速度', W - 6, H - 8); }
+  if (MODE_ORDER[c.mode]) { ctx.fillStyle = 'rgba(255,120,200,.9)'; ctx.fillText('桃: 加速度', W - 6, H - 8); }
   ctx.textAlign = 'center';
 
   if (!g.timerOn) {
@@ -542,14 +866,13 @@ function draw() {
     ctx.fillText('動かすとタイマー開始', W / 2, H / 2);
   }
   if (g.flash > 0) { ctx.fillStyle = `rgba(255,77,94,${g.flash * 0.4})`; ctx.fillRect(0, 0, W, H); g.flash = Math.max(0, g.flash - 0.04); }
-
   $('timer').textContent = fmt(g.elapsed);
 }
 
 renderMenu();
 
 // 自動テスト用フック(画面には影響しない)
-window.__oni = { game, held, STAGES, CONFIG, startStage, update, stopGame };
+window.__oni = { game, held, tapped, STAGES, CONFIG, startStage, update, stopGame };
 </script>
 </body>
 </html>
