@@ -22,7 +22,9 @@
     minZoom: 0.25,        // 最も近づいたときの距離(画面いっぱいの何倍か)
     maxZoom: 3.5,         // 最も離れたときの距離
     maxPixelRatio: 2,     // 高解像度端末での描画倍率の上限(重さ対策)
-    initialTilt: [-0.55, 0.65] // 初期の傾き [x軸, y軸] rad
+    initialTilt: [-0.55, 0.65], // 初期の傾き [x軸, y軸] rad
+    inertia: 0.94,        // 離したあとの慣性(1フレームあたりの残り。0 で慣性なし、1に近いほど長く回る)
+    inertiaMinSpeed: 0.15 // rad/s: これより遅くなったら止める
   };
 
   /* ================= ジェスチャー ================= */
@@ -64,7 +66,7 @@
         if (Math.hypot(p.x - start.x, p.y - start.y) > C.tapMaxMove) {
           clearTimeout(timer);
           mode = 'drag';
-          claimed = !!(h.onDragStart && h.onDragStart(start.x, start.y, start));
+          claimed = !!(h.onDragStart && h.onDragStart(start.x, start.y, start, p.x - start.x, p.y - start.y));
         }
       }
       if (mode === 'drag') {
@@ -163,14 +165,16 @@
     // ---- 回転アニメーション ----
     let rotAnim = null;
     function animateTo(q, ms) {
+      spin = null;
       rotAnim = { from: pivot.quaternion.clone(), to: q.clone(), t: 0, ms: ms == null ? C.axisRotateMs : ms };
       wake();
     }
     function rotateScreen(axis, angle, animate) { // axis: 0=画面x(横) 1=画面y(縦) 2=画面z(奥行)
       const a = new T.Vector3(); a.setComponent(axis, 1);
+      spin = null;
       const base = rotAnim ? rotAnim.to : pivot.quaternion;
       const q = new T.Quaternion().setFromAxisAngle(a, angle).multiply(base);
-      if (animate === false) { rotAnim = null; pivot.quaternion.copy(q); dirty = true; } else animateTo(q);
+      if (animate === false) { rotAnim = null; pivot.quaternion.copy(q); dirty = true; wake(); } else animateTo(q);
       api.onRotate && api.onRotate();
     }
     const defaultQuat = () => new T.Quaternion().setFromEuler(new T.Euler(C.initialTilt[0], C.initialTilt[1], 0, 'XYZ'));
@@ -180,21 +184,33 @@
       onTap: (x, y, i) => opts.onTap && opts.onTap(x, y, i),
       onLongPress: (x, y, i) => opts.onLongPress && opts.onLongPress(x, y, i),
       onHover: (x, y) => opts.onHover && opts.onHover(x, y),
-      onDragStart: (x, y, i) => i.button === 0 && !i.shift && opts.claimDrag ? opts.claimDrag(x, y, i) : false,
+      onDragStart: (x, y, i, dx, dy) => { spin = null; vel.set(0, 0); lastMove = performance.now(); return i.button === 0 && !i.shift && opts.claimDrag ? opts.claimDrag(x, y, i, dx, dy) : false; },
       onDrag: (dx, dy, x, y, claimed, s) => {
         if (claimed) { opts.onClaimedDrag && opts.onClaimedDrag(dx, dy, x, y); return; }
         if (s.button === 2 || s.button === 1 || s.shift) { panBy(dx, dy); return; }
-        const len = Math.hypot(dx, dy); if (!len) return;
-        rotAnim = null;
-        const q = new T.Quaternion().setFromAxisAngle(new T.Vector3(dy / len, dx / len, 0), len * C.rotateSpeed);
-        pivot.quaternion.premultiply(q); dirty = true;
-        api.onRotate && api.onRotate();
+        rotAnim = null; spin = null;
+        const now = performance.now(), dt = Math.max(1, now - lastMove) / 1000; lastMove = now;
+        vel.set(vel.x * 0.5 + (dx / dt) * 0.5, vel.y * 0.5 + (dy / dt) * 0.5); // 直近の指の速さ(px/s)
+        dragRotate(dx, dy);
       },
-      onDragEnd: (dx, dy, x, y, claimed, cancelled) => { if (claimed && opts.onClaimedDragEnd) opts.onClaimedDragEnd(dx, dy, x, y, cancelled); },
+      onDragEnd: (dx, dy, x, y, claimed, cancelled) => {
+        if (claimed) { opts.onClaimedDragEnd && opts.onClaimedDragEnd(dx, dy, x, y, cancelled); return; }
+        // 指を止めてから離したときは慣性なし。動かしたまま離したときだけ回り続ける
+        if (cancelled || !C.inertia || performance.now() - lastMove > 120) return;
+        const sp = Math.hypot(vel.x, vel.y) * C.rotateSpeed;
+        if (sp > C.inertiaMinSpeed * 3) { spin = { x: vel.x, y: vel.y }; wake(); }
+      },
       onPinch: (s) => setZoom(zoom / s),
       onPan: (dx, dy) => panBy(dx, dy),
       onWheel: (d) => setZoom(zoom * Math.exp(d * C.wheelZoom))
     });
+    let spin = null, lastMove = 0; const vel = new T.Vector2();
+    function dragRotate(dx, dy) {
+      const len = Math.hypot(dx, dy); if (!len) return;
+      const q = new T.Quaternion().setFromAxisAngle(new T.Vector3(dy / len, dx / len, 0), len * C.rotateSpeed);
+      pivot.quaternion.premultiply(q); dirty = true; wake();
+      api.onRotate && api.onRotate();
+    }
     function panBy(dx, dy) {
       const k = 2 * Math.tan(T.MathUtils.degToRad(camera.fov) / 2) / H;
       pan.x -= dx * k; pan.y += dy * k; updateCamera();
@@ -228,6 +244,12 @@
         pivot.quaternion.slerpQuaternions(rotAnim.from, rotAnim.to, e);
         if (k >= 1) rotAnim = null; else busy = true;
         dirty = true; api.onRotate && api.onRotate();
+      }
+      if (spin) {
+        const f = Math.pow(C.inertia, dt * 60);
+        spin.x *= f; spin.y *= f;
+        if (Math.hypot(spin.x, spin.y) * C.rotateSpeed < C.inertiaMinSpeed) spin = null;
+        else { dragRotate(spin.x * dt, spin.y * dt); busy = true; }
       }
       for (const f of ticks) { if (f(dt)) busy = true; else ticks.delete(f); dirty = true; }
       if (dirty || busy) {
