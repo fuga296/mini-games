@@ -41,6 +41,13 @@ test('既定は人狼全員が同じワード。設定で人狼ごとに別の�
   assert.equal(b.length, 2);
   assert.deepEqual(b.map((e) => e.visibleTo), [['p1'], ['p7']]);
   assert.notEqual(words(b[0])[0], words(b[1])[0]);
+  // 別々のワードでも、公開は全員分をまとめて、誰のものかは分からない形
+  let t = s;
+  t = run(t, [act('p2', 'divine', 'p5'), adv, adv], P);
+  t = run(t, t.votes.voters.map((v) => vote(v, v === 'p5' ? 'p6' : 'p5')).concat([adv]), P);
+  t = run(t, [act('p2', 'divine', 'p1'), act('p3', 'guard', 'p6'), act('p1', 'attack', 'p6'), act('p7', 'attack', 'p6'), adv], P);
+  const rv = events(t, 'powerWordReveal')[0];
+  assert.deepEqual(rv.data.words.map((w) => w.text).sort(), [words(b[0])[0], words(b[1])[0]].sort());
   assert.equal(E.view(s, P, 'p1').log.filter((e) => e.type === 'powerWordGiven').length, 1);
 });
 
@@ -59,7 +66,9 @@ test('公開: 次の夜が明けた朝に、前日のワードが全員へ公開
   const rev = events(s, 'powerWordReveal');
   assert.equal(rev.length, 1);
   assert.equal(rev[0].visibleTo, 'all');
-  assert.equal(Object.values(rev[0].data.words)[0].text, w1, '公開されるのは前日のワード');
+  assert.equal(rev[0].data.words[0].text, w1, '公開されるのは前日のワード');
+  assert.ok(Array.isArray(rev[0].data.words), '公開の記録に人狼の ID を含めない');
+  assert.ok(!JSON.stringify(rev[0].data).includes('"p1"') && !JSON.stringify(rev[0].data).includes('"p7"'));
   assert.equal(E.view(s, P, 'public').log.filter((e) => e.type === 'powerWordReveal').length, 1);
 });
 
@@ -72,7 +81,7 @@ test('終了: 決着したとき、使われなかった最後のワードも公
   const rev = events(s, 'powerWordReveal');
   assert.equal(rev.length, 1);
   assert.equal(rev[0].data.final, true);
-  assert.equal(Object.values(rev[0].data.words)[0].text, w1);
+  assert.equal(rev[0].data.words[0].text, w1);
 });
 
 test('配布: 死んだ人狼には配られない。人狼がいなければ配られない', () => {

@@ -3,114 +3,164 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#1b1d2e">
+<meta name="theme-color" content="#17120f">
+<meta name="color-scheme" content="dark">
 <title>人狼ゲーム</title>
 <style>
+  /* 色は役割で決めている。
+     墨=地  蝋燭=灯り・秘密のしるし  血=人狼・主ボタン  骨=文字  苔=村人  狐火=妖狐
+     昼は蝋燭の灯る暗い部屋、夜は月明かりだけの暗さ。どちらも暗いまま、冷たさだけ変える。 */
   :root {
-    --bg: #f4f1ea; --fg: #222; --card: #fff; --muted: #6b6b6b; --line: #ddd6c8;
-    --accent: #b0412e; --accent-fg: #fff; --village: #2f6f4f; --wolf: #b0412e; --fox: #b9831f;
-    --chip: #efe9dc; --secret: #f6ecd4;
+    --ink: #17120f; --panel: #211a15; --panel2: #2a211b;
+    --bone: #e8e0cf; --mute: #a89f8d; --line: rgba(232,224,207,.17);
+    --blood: #8c2b25; --blood-text: #e0675a; --candle: #d6a24a; --moss: #8fb084; --fox: #78bfa9;
+    --glow: rgba(214,162,74,.13);
+    --serif: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", YuMincho, "Noto Serif CJK JP", "Noto Serif JP", serif;
+    --sans: "BIZ UDPGothic", -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans CJK JP", "Yu Gothic", sans-serif;
   }
   body.is-night {
-    --bg: #15172a; --fg: #e8e6f0; --card: #22253d; --muted: #a3a3bb; --line: #3a3e5e;
-    --accent: #c9a64a; --accent-fg: #15172a; --village: #6fc39b; --wolf: #ef7b67; --fox: #e6b955;
-    --chip: #2e3252; --secret: #34304a;
+    --ink: #0b0e12; --panel: #12171e; --panel2: #19202a;
+    --bone: #dfe3e6; --mute: #8d98a4; --line: rgba(223,227,230,.15);
+    --blood-text: #e0766a; --moss: #8cb59a; --glow: rgba(150,180,215,.10);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; }
   body {
-    background: var(--bg); color: var(--fg);
-    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
-    font-size: 16px; line-height: 1.6;
+    word-break: auto-phrase; overflow-wrap: anywhere;
+    background: var(--ink); color: var(--bone); min-height: 100vh;
+    font-family: var(--sans); font-size: 16px; line-height: 1.8; letter-spacing: .02em;
     -webkit-tap-highlight-color: transparent;
   }
-  #app { max-width: 560px; margin: 0 auto; padding: 12px 16px calc(24px + env(safe-area-inset-bottom)); }
-  h1 { margin: 0; font-size: 30px; letter-spacing: .1em; }
-  h2 { font-size: 20px; margin: 0 0 8px; }
-  h3 { font-size: 16px; margin: 12px 0 6px; }
-  h3 small, .hint, .small { color: var(--muted); font-size: 13px; font-weight: normal; }
+  /* 灯りの当たり方：画面の上から、ごくわずかに */
+  body::before { content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(120% 60% at 50% -10%, var(--glow), transparent 70%); }
+  #app { position: relative; z-index: 1; max-width: 560px; margin: 0 auto; padding: 8px 16px calc(28px + env(safe-area-inset-bottom)); }
+
+  h1, h2, h3, .serif { font-family: var(--serif); font-weight: 700; letter-spacing: .06em; line-height: 1.45; }
+  h2 { font-size: 21px; margin: 0 0 8px; }
+  h3 { font-size: 16px; margin: 18px 0 6px; color: var(--candle); }
+  h3 small, .hint, .small { color: var(--mute); font-size: 13px; font-weight: normal; letter-spacing: .02em; }
   h3 small { margin-left: 8px; }
   p { margin: 6px 0; }
-  .title { text-align: center; padding: 28px 0 12px; }
-  .title .sub { color: var(--muted); }
-  .moon { width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 10px; background: #c9a64a; box-shadow: inset -14px -6px 0 0 #a8852f; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin: 12px 0; }
-  details.card > summary { cursor: pointer; font-weight: bold; }
-  .sticky { position: sticky; bottom: 8px; box-shadow: 0 4px 18px rgba(0,0,0,.12); }
-  .btn {
-    display: block; width: 100%; min-height: 48px; margin: 6px 0; padding: 10px 14px;
-    border-radius: 12px; border: 1px solid var(--line); background: var(--chip); color: var(--fg);
-    font: inherit; font-weight: bold; cursor: pointer;
-  }
-  .btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-  .btn.ghost { background: transparent; }
-  .btn.small { min-height: 40px; font-size: 14px; font-weight: normal; }
-  .btn.danger { color: var(--wolf); }
-  .btn:disabled { opacity: .4; cursor: default; }
-  .mode { display: block; width: 100%; text-align: left; padding: 14px; margin: 8px 0; border-radius: 12px; border: 1px solid var(--line); background: var(--chip); color: var(--fg); font: inherit; cursor: pointer; }
-  .mode b { display: block; font-size: 18px; }
-  .mode span { color: var(--muted); font-size: 14px; }
-  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-  .seat { width: 24px; text-align: right; color: var(--muted); font-size: 13px; }
-  input.name { flex: 1; min-width: 0; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--fg); }
-  .icon { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: var(--chip); color: var(--fg); font-size: 20px; cursor: pointer; flex: none; }
-  .stepper .rname { flex: 1; font-weight: bold; }
+  .village { color: var(--moss); } .wolf { color: var(--blood-text); } .fox { color: var(--fox); }
+
+  /* 面：角丸なし、影なし。区切りは細い線と地の明るさの差だけ */
+  .card { background: var(--panel); border: 1px solid var(--line); margin: 14px 0; padding: 16px; }
+  details.card > summary { cursor: pointer; font-family: var(--serif); font-weight: 700; letter-spacing: .06em; }
+  .sticky { position: sticky; bottom: 8px; background: var(--panel2); border-color: rgba(232,224,207,.3); }
+
+  .btn { display: block; width: 100%; min-height: 50px; margin: 8px 0; padding: 10px 14px; border-radius: 2px;
+    border: 1px solid var(--line); background: transparent; color: var(--bone);
+    font: inherit; font-family: var(--serif); font-weight: 700; font-size: 17px; letter-spacing: .12em; cursor: pointer; }
+  .btn.primary { background: var(--blood); border-color: var(--blood); color: #f4ece0; }
+  .btn.small { min-height: 42px; font-size: 14px; font-weight: 400; letter-spacing: .04em; font-family: var(--sans); }
+  .btn.danger { color: var(--blood-text); }
+  .btn:disabled { opacity: .35; cursor: default; }
+  .btn:active:not(:disabled), .target:active, .mode:active { transform: translateY(1px); }
+
+  /* ホーム：縦書きの題と、遊び方の一覧 */
+  .title { display: flex; justify-content: space-between; gap: 18px; padding: 36px 4px 22px; min-height: 270px; }
+  .title .lead { align-self: flex-end; padding-bottom: 6px; }
+  .title .lead p { font-family: var(--serif); font-size: 18px; letter-spacing: .1em; line-height: 2; margin: 0; }
+  .title .lead .quiet { color: var(--mute); font-size: 13px; letter-spacing: .04em; font-family: var(--sans); margin-top: 14px; line-height: 1.8; }
+  .title h1 { margin: 0; font-size: 72px; font-weight: 800; line-height: 1.12; color: var(--blood-text); }
+  .title h1 span { display: block; }
+  .mode { display: block; width: 100%; text-align: left; padding: 16px 4px; margin: 0; border: 0; border-top: 1px solid var(--line); background: transparent; color: var(--bone); font: inherit; cursor: pointer; }
+  .mode:last-of-type { border-bottom: 1px solid var(--line); }
+  .mode b { display: block; font-family: var(--serif); font-size: 20px; letter-spacing: .08em; }
+  .mode span { display: block; color: var(--mute); font-size: 14px; margin-top: 2px; }
+  .mode::after { content: "→"; float: right; margin-top: -42px; color: var(--blood-text); font-size: 20px; }
+
+  .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .seat { width: 24px; text-align: right; color: var(--mute); font-size: 13px; }
+  input.name { flex: 1; min-width: 0; font: inherit; padding: 10px; border: 1px solid var(--line); border-radius: 2px; background: var(--ink); color: var(--bone); }
+  .icon { width: 44px; height: 44px; border-radius: 2px; border: 1px solid var(--line); background: transparent; color: var(--bone); font-size: 20px; cursor: pointer; flex: none; }
+  .stepper .rname { flex: 1; font-family: var(--serif); font-weight: 700; letter-spacing: .08em; }
   .stepper .num { width: 28px; text-align: center; font-size: 18px; }
-  .village { color: var(--village); } .wolf { color: var(--wolf); } .fox { color: var(--fox); }
   .check { display: flex; gap: 8px; align-items: center; margin: 6px 0 10px; font-size: 14px; }
-  .check input { width: 20px; height: 20px; }
-  .field { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 10px 0; font-size: 14px; }
-  .field select { font: inherit; font-size: 14px; padding: 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); max-width: 60%; }
-  .error { color: var(--wolf); font-weight: bold; }
-  .bar { display: flex; align-items: center; gap: 10px; padding: 8px 4px; }
-  .bar b { flex: 1; font-size: 18px; }
-  .bar span { color: var(--muted); font-size: 13px; }
-  .bar .menu { width: 40px; height: 40px; }
-  .handoff { text-align: center; padding: 34px 14px; }
-  .handoff .who { font-size: 32px; font-weight: bold; margin: 4px 0; word-break: break-all; }
-  .handoff .step { color: var(--muted); font-size: 13px; }
-  .rolecard { text-align: center; padding: 6px 0 8px; border-bottom: 1px dashed var(--line); margin-bottom: 8px; }
-  .rname-big { font-size: 34px; font-weight: bold; margin: 2px 0; }
-  .rolecard .team { font-weight: bold; }
-  .rolecard p { color: var(--fg); }
-  .rolecard .small { color: var(--muted); }
-  .rolecard.village .rname-big, .rolecard.village .team { color: var(--village); }
-  .rolecard.wolf .rname-big, .rolecard.wolf .team { color: var(--wolf); }
-  .rolecard.fox .rname-big, .rolecard.fox .team { color: var(--fox); }
+  .check input { width: 20px; height: 20px; accent-color: var(--blood); }
+  .field { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 12px 0; font-size: 14px; }
+  .field select { font: inherit; font-size: 14px; padding: 8px; border-radius: 2px; border: 1px solid var(--line); background: var(--ink); color: var(--bone); max-width: 58%; }
+  .error { color: var(--blood-text); font-weight: bold; }
+  .ruleinfo { color: var(--mute); font-size: 14px; margin: 8px 0 0; }
+
+  .bar { display: flex; align-items: baseline; gap: 10px; padding: 14px 2px 8px; border-bottom: 1px solid var(--line); }
+  .bar b { flex: 1; font-family: var(--serif); font-size: 20px; letter-spacing: .1em; }
+  .bar span { color: var(--mute); font-size: 13px; }
+  .bar .menu { width: 40px; height: 40px; align-self: center; }
+
+  /* 仕掛け：封蝋。スマホを渡すたびに、宛名の入った封をいったん見せる */
+  .handoff { text-align: center; padding: 30px 14px 22px; }
+  .handoff .step { color: var(--mute); font-size: 13px; letter-spacing: .2em; }
+  .seal { width: 92px; height: 88px; margin: 14px auto 8px; background: var(--blood); color: #f0e3d3;
+    border-radius: 48% 52% 46% 54% / 54% 46% 52% 48%; display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-weight: 800; font-size: 40px; box-shadow: inset 0 0 0 5px rgba(0,0,0,.18); }
+  .handoff .who { font-family: var(--serif); font-size: 28px; font-weight: 700; letter-spacing: .1em; margin: 6px 0 0; word-break: break-all; }
+  .handoff .to { color: var(--mute); margin: 0 0 10px; }
+
+  .rolecard { padding: 4px 0 12px; border-bottom: 1px dashed var(--line); margin-bottom: 10px; }
+  .rolecard p { color: var(--bone); }
+  .rolecard .small { letter-spacing: .1em; color: var(--mute); }
+  .rname-big { font-family: var(--serif); font-size: 42px; font-weight: 800; letter-spacing: .16em; margin: 0; line-height: 1.3; }
+  .rolecard p.allies { color: var(--candle); }
+  .rolecard .team { font-weight: bold; letter-spacing: .1em; margin: 0 0 8px; }
+  .rolecard.village p.rname-big, .rolecard.village p.team { color: var(--moss); }
+  .rolecard.wolf p.rname-big, .rolecard.wolf p.team { color: var(--blood-text); }
+  .rolecard.fox p.rname-big, .rolecard.fox p.team { color: var(--fox); }
   .allies { font-weight: bold; }
-  .targets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
-  .target { min-height: 52px; border-radius: 12px; border: 2px solid var(--line); background: var(--chip); color: var(--fg); font: inherit; font-weight: bold; cursor: pointer; word-break: break-all; }
-  .target.on { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
-  .result { font-size: 20px; font-weight: bold; padding: 10px; border-radius: 10px; background: var(--secret); text-align: center; }
-  .big { font-size: 20px; font-weight: bold; }
+
+  .targets { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+  .target { min-height: 54px; border-radius: 2px; border: 1px solid var(--line); background: var(--panel2); color: var(--bone); font: inherit; font-family: var(--serif); font-weight: 700; font-size: 17px; letter-spacing: .08em; cursor: pointer; word-break: break-all; }
+  .target.on { background: var(--blood); border-color: var(--blood); color: #f4ece0; }
+
+  /* 本人にしか見えない知らせ：蝋燭色の面 */
+  .result { font-family: var(--serif); font-size: 19px; font-weight: 700; padding: 12px; background: var(--panel2); color: var(--candle); border: 1px dashed rgba(214,162,74,.5); margin: 10px 0; letter-spacing: .06em; }
+  .result.wolf { color: var(--blood-text); border-color: rgba(224,103,90,.5); }
+  .result.village { color: var(--moss); border-color: rgba(143,176,132,.5); }
+  .word { text-align: left; }
+  .word b { display: block; font-size: 34px; letter-spacing: .14em; margin: 2px 0; color: var(--bone); }
+  .word small { display: block; font-family: var(--sans); font-size: 13px; font-weight: 400; color: var(--mute); letter-spacing: .02em; }
+  .big { font-family: var(--serif); font-size: 21px; font-weight: 700; letter-spacing: .06em; line-height: 1.7; }
+
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip { padding: 4px 10px; border-radius: 999px; background: var(--chip); font-size: 14px; }
-  .chip em { font-style: normal; font-weight: bold; margin-left: 4px; font-size: 12px; }
-  .chip.dead { text-decoration: line-through; opacity: .5; }
-  .chip.win::before { content: '★'; color: var(--fox); margin-right: 2px; }
+  .chip { padding: 3px 10px; border: 1px solid var(--line); border-radius: 2px; font-size: 14px; }
+  .chip em { font-style: normal; font-weight: bold; margin-left: 6px; font-size: 12px; color: var(--mute); }
+  .chip.dead { text-decoration: line-through; opacity: .45; }
+  .chip.win { border-color: var(--candle); }
+  .chip.win::before { content: '勝'; color: var(--candle); margin-right: 4px; font-size: 12px; }
+
   .log { list-style: none; padding: 0; margin: 6px 0; font-size: 14px; }
-  .log li { padding: 6px 0; border-bottom: 1px solid var(--line); }
-  .log li.secret { background: var(--secret); padding-left: 6px; }
-  .log .d { color: var(--muted); font-size: 12px; margin-right: 6px; }
-  .log .sub { color: var(--muted); font-size: 12px; padding-left: 12px; }
+  .log li { padding: 7px 0; border-bottom: 1px solid var(--line); }
+  .log li.secret { color: var(--candle); }
+  .log .d { color: var(--mute); font-size: 12px; margin-right: 8px; letter-spacing: .06em; }
+  .log .sub { color: var(--mute); font-size: 12px; padding-left: 12px; }
+
   .timer { text-align: center; }
-  .time { font-size: 56px; font-weight: bold; font-variant-numeric: tabular-nums; }
-  .time.low { color: var(--wolf); }
+  .time { font-family: var(--serif); font-size: 60px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .08em; color: var(--candle); line-height: 1.3; }
+  .time.low { color: var(--blood-text); }
   .timer .btn.small { display: inline-block; width: 48%; }
+
+  /* 司会が読み上げる台本。線ではなく地の色と明朝で区別する */
+  .script { background: var(--panel2); font-family: var(--serif); letter-spacing: .06em; }
   .script p, .say { font-size: 15px; }
-  .script { border-left: 4px solid var(--accent); }
+  .say { font-family: var(--serif); letter-spacing: .06em; }
   .step h3 { margin-top: 0; }
-  .announce { text-align: center; padding: 24px 14px; }
-  .ballots { font-size: 14px; color: var(--muted); margin-top: 10px; }
-  .end { text-align: center; padding: 26px 14px; }
-  .end h2 { font-size: 26px; }
-  .end.village h2 { color: var(--village); } .end.wolf h2 { color: var(--wolf); } .end.fox h2 { color: var(--fox); }
-  .flow, .roles { padding-left: 20px; } .roles li, .flow li { margin: 6px 0; }
-  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
-  .sheet { background: var(--card); color: var(--fg); width: 100%; max-width: 560px; max-height: 80vh; overflow: auto; border-radius: 16px 16px 0 0; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
-  #toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: #333; color: #fff; padding: 10px 16px; border-radius: 10px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; max-width: 90%; }
+  .announce { padding: 26px 16px; }
+  .announce .big { margin: 14px 0; }
+  .ballots { font-size: 14px; color: var(--mute); margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .end { padding: 30px 16px; }
+  .end h2 { font-size: 30px; letter-spacing: .12em; }
+  .end.village h2 { color: var(--moss); } .end.wolf h2 { color: var(--blood-text); } .end.fox h2 { color: var(--fox); }
+  .flow, .roles { padding-left: 20px; } .roles li, .flow li { margin: 8px 0; }
+  .morning { border-color: rgba(224,103,90,.55); }
+  .morning h3 { margin-top: 0; color: var(--blood-text); }
+
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; justify-content: center; z-index: 10; }
+  .sheet { background: var(--panel); border-top: 1px solid var(--line); width: 100%; max-width: 560px; max-height: 80vh; overflow: auto; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+  #toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); background: var(--bone); color: var(--ink); padding: 10px 16px; border-radius: 2px; font-size: 14px; opacity: 0; pointer-events: none; z-index: 20; max-width: 90%; }
   #toast.show { opacity: 1; }
   noscript { display: block; padding: 20px; }
+  @media (prefers-reduced-motion: no-preference) { .btn, .target { transition: background-color .12s; } }
 </style>
 </head>
 <body>
@@ -123,6 +173,8 @@
 <script src="core/engine.js"></script>
 <script src="core/session.js"></script>
 <script src="rules/standard.js"></script>
+<script src="rules/powerwords.js"></script>
+<script src="rules/powerword.js"></script>
 <!-- 文言と画面 -->
 <script src="ui/text-ja.js"></script>
 <script src="ui/app.js"></script>

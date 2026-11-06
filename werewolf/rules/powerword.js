@@ -31,9 +31,17 @@
       return { text: w.text, kind: w.kind };
     }
 
+    /** 公開する記録には、誰がどのワードだったか（＝人狼の正体）を含めない。ワードだけを重複なしで並べる */
     function reveal(ctx, rec, final) {
       if (!rec) return;
-      ctx.emit('powerWordReveal', { words: rec.words, shared: rec.shared, forDay: rec.day, final: !!final }, 'all');
+      var seen = {};
+      var list = [];
+      Object.keys(rec.words).forEach(function (id) {
+        var w = rec.words[id];
+        if (!seen[w.text]) { seen[w.text] = true; list.push({ text: w.text, kind: w.kind }); }
+      });
+      list.sort(function (a, b) { return a.text < b.text ? -1 : a.text > b.text ? 1 : 0; });
+      ctx.emit('powerWordReveal', { words: list, forDay: rec.day, final: !!final }, 'all');
     }
 
     var night = Object.assign({}, baseNight, {
