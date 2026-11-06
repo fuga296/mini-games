@@ -15,14 +15,13 @@
   /* ===================== 設定 (ここを変えれば調整できる) ===================== */
   var CONFIG = {
     // 出る桁の確率: 段 k (1桁=1 … 16桁=16、最大値=17) について x = k-1 として
-    //   P(k) ∝ exp(-digitDecline·x - c·x^tailPower)
-    // 前半は「1桁上がるごとに約 exp(-digitDecline) 倍」で着実に減り、後半は x^tailPower の項で急に絞られる。
-    // c は「最大値 (17段目) が 1/maxOdds になる」ように自動で決まる。最大値の専用ルールはない。
-    // digitDecline 0.10 → 1桁 約16%、1桁上がるごとに約0.9倍 (序盤)、12桁 約1%、16桁 約0.02%
+    //   P(k) ∝ exp(-digitDecline·x - tailStrength·x^tailPower)
+    // 前半は「1桁上がるごとに約 exp(-digitDecline) 倍」で着実に減り、後半は第2項で急に絞られる。
+    // 最大値は 17段目として同じ式から出る確率で、専用の確率設定はない (結果は DESIGN.md: 約 1/30,000)。
+    // 3つの定数は「前半は約0.9倍ずつ」「最大値が数年に一度」になるよう人が決めた値。
     digitDecline: 0.10,
+    tailStrength: 1.05e-4,
     tailPower: 4,
-    // 最大値が出る確率 = 1/maxOdds。10回/日で平均約8年に1回 (DESIGN.md)
-    maxOdds: 30000,
     // 1回の更新で回せる回数 (貯めない)
     pullsPerRefresh: 5,
     // 更新間隔 (時間)。24 の約数を想定。端末の現地時刻 0:00 起点で区切る
@@ -76,26 +75,13 @@
     return hi - lo + 1;
   }
   var wCache = {};
-  function rawWeights(cfg, c) {
-    var w = [], k;
-    for (k = 0; k < TIERS; k++) w.push(Math.exp(-cfg.digitDecline * k - c * Math.pow(k, cfg.tailPower)));
-    return w;
-  }
-  function norm(w) { var s = 0, k; for (k = 0; k < w.length; k++) s += w[k]; return w.map(function (x) { return x / s; }); }
-  /** 最大値 (17段目) の確率が 1/maxOdds になる係数 c を二分法で求める */
-  function solveC(cfg) {
-    var lo = -60, hi = 6, i;
-    for (i = 0; i < 200; i++) {
-      var m = (lo + hi) / 2;
-      if (norm(rawWeights(cfg, Math.exp(m)))[TIERS - 1] > 1 / cfg.maxOdds) lo = m; else hi = m;
-    }
-    return Math.exp((lo + hi) / 2);
-  }
-  function tierWeights(cfg) { // 各段の確率 w[0..16] (合計 1)
-    var key = cfg.digitDecline + '/' + cfg.tailPower + '/' + cfg.maxOdds;
+  function tierWeights(cfg) { // 各段の確率 w[0..16] (合計 1)。最大値は w[16]
+    var key = cfg.digitDecline + '/' + cfg.tailStrength + '/' + cfg.tailPower;
     if (wCache[key]) return wCache[key];
-    var c = solveC(cfg);
-    return (wCache[key] = { w: norm(rawWeights(cfg, c)), sum: 1, c: c });
+    var w = [], sum = 0, k;
+    for (k = 0; k < TIERS; k++) { var x = Math.exp(-cfg.digitDecline * k - cfg.tailStrength * Math.pow(k, cfg.tailPower)); w.push(x); sum += x; }
+    for (k = 0; k < TIERS; k++) w[k] /= sum;
+    return (wCache[key] = { w: w, sum: 1 });
   }
   /** 段 k に入る確率 (k = 1..17) */
   function tierProb(k, cfg) {
