@@ -14,11 +14,13 @@
 
   /* ===================== 設定 (ここを変えれば調整できる) ===================== */
   var CONFIG = {
-    // 出る桁の確率: 段 k (1桁=1 … 16桁=16、最大値=17) について P(k) ∝ exp(-c·(k-1)^shape)。
-    // shape が大きいほど、前半 (小さい桁) は平らで、後半に急に出にくくなる。
+    // 出る桁の確率: 段 k (1桁=1 … 16桁=16、最大値=17) について x = k-1 として
+    //   P(k) ∝ exp(-digitDecline·x - c·x^tailPower)
+    // 前半は「1桁上がるごとに約 exp(-digitDecline) 倍」で着実に減り、後半は x^tailPower の項で急に絞られる。
     // c は「最大値 (17段目) が 1/maxOdds になる」ように自動で決まる。最大値の専用ルールはない。
-    // shape 7 → 1桁 約8.6%、12桁 約4%、16桁 約0.1%
-    digitShape: 7,
+    // digitDecline 0.10 → 1桁 約16%、1桁上がるごとに約0.9倍 (序盤)、12桁 約1%、16桁 約0.02%
+    digitDecline: 0.10,
+    tailPower: 4,
     // 最大値が出る確率 = 1/maxOdds。10回/日で平均約8年に1回 (DESIGN.md)
     maxOdds: 30000,
     // 1回の更新で回せる回数 (貯めない)
@@ -35,11 +37,11 @@
     rarities: [
       { id: 'MAX', name: 'MAX', label: '最大値', isMax: true, color: '#ffffff', glow: '#ff4fd8', rainbow: true },
       { id: 'LR', name: 'LR', label: 'レジェンド', minDigits: 14, color: '#ff5a7a', glow: '#ff2d55', rainbow: true },
-      { id: 'UR', name: 'UR', label: 'ウルトラ', minDigits: 13, color: '#ff8a3d', glow: '#ff6a00' },
-      { id: 'SSR', name: 'SSR', label: 'Sスーパー', minDigits: 12, color: '#ffd23f', glow: '#ffb800' },
-      { id: 'SR', name: 'SR', label: 'スーパー', minDigits: 10, color: '#c084fc', glow: '#a855f7' },
-      { id: 'R', name: 'R', label: 'レア', minDigits: 8, color: '#60a5fa', glow: '#3b82f6' },
-      { id: 'UC', name: 'UC', label: 'アンコモン', minDigits: 5, color: '#4ade80', glow: '#22c55e' },
+      { id: 'UR', name: 'UR', label: 'ウルトラ', minDigits: 12, color: '#ff8a3d', glow: '#ff6a00' },
+      { id: 'SSR', name: 'SSR', label: 'Sスーパー', minDigits: 10, color: '#ffd23f', glow: '#ffb800' },
+      { id: 'SR', name: 'SR', label: 'スーパー', minDigits: 8, color: '#c084fc', glow: '#a855f7' },
+      { id: 'R', name: 'R', label: 'レア', minDigits: 6, color: '#60a5fa', glow: '#3b82f6' },
+      { id: 'UC', name: 'UC', label: 'アンコモン', minDigits: 4, color: '#4ade80', glow: '#22c55e' },
       { id: 'C', name: 'C', label: 'コモン', minDigits: 1, color: '#dfe6f0', glow: '#94a3b8' }
     ]
   };
@@ -74,23 +76,26 @@
     return hi - lo + 1;
   }
   var wCache = {};
+  function rawWeights(cfg, c) {
+    var w = [], k;
+    for (k = 0; k < TIERS; k++) w.push(Math.exp(-cfg.digitDecline * k - c * Math.pow(k, cfg.tailPower)));
+    return w;
+  }
+  function norm(w) { var s = 0, k; for (k = 0; k < w.length; k++) s += w[k]; return w.map(function (x) { return x / s; }); }
   /** 最大値 (17段目) の確率が 1/maxOdds になる係数 c を二分法で求める */
-  function solveC(shape, odds) {
-    var lo = -60, hi = 6, i, k;
+  function solveC(cfg) {
+    var lo = -60, hi = 6, i;
     for (i = 0; i < 200; i++) {
-      var m = (lo + hi) / 2, c = Math.exp(m), sum = 0;
-      for (k = 0; k < TIERS; k++) sum += Math.exp(-c * Math.pow(k, shape));
-      if (Math.exp(-c * Math.pow(TIERS - 1, shape)) / sum > 1 / odds) lo = m; else hi = m;
+      var m = (lo + hi) / 2;
+      if (norm(rawWeights(cfg, Math.exp(m)))[TIERS - 1] > 1 / cfg.maxOdds) lo = m; else hi = m;
     }
     return Math.exp((lo + hi) / 2);
   }
   function tierWeights(cfg) { // 各段の確率 w[0..16] (合計 1)
-    var key = cfg.digitShape + '/' + cfg.maxOdds;
+    var key = cfg.digitDecline + '/' + cfg.tailPower + '/' + cfg.maxOdds;
     if (wCache[key]) return wCache[key];
-    var c = solveC(cfg.digitShape, cfg.maxOdds), w = [], sum = 0, k;
-    for (k = 0; k < TIERS; k++) { var x = Math.exp(-c * Math.pow(k, cfg.digitShape)); w.push(x); sum += x; }
-    for (k = 0; k < TIERS; k++) w[k] /= sum;
-    return (wCache[key] = { w: w, sum: 1, c: c });
+    var c = solveC(cfg);
+    return (wCache[key] = { w: norm(rawWeights(cfg, c)), sum: 1, c: c });
   }
   /** 段 k に入る確率 (k = 1..17) */
   function tierProb(k, cfg) {

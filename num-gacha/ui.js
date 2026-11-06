@@ -72,7 +72,7 @@
       html += '<tr><td>' + rarityTag(r) + '</td><td>' + range + '</td><td class="r">' + oneIn(row.p) + '</td></tr>';
     });
     t.innerHTML = html;
-    $('ratenote').innerHTML = '桁ごとの確率: 1桁 ' + oneIn(G.tierProb(1)) + ' / 8桁 ' + oneIn(G.tierProb(8)) + ' / 12桁 ' + oneIn(G.tierProb(12)) + ' / 16桁 ' + oneIn(G.tierProb(16)) +
+    $('ratenote').innerHTML = '桁ごとの確率: 1桁 ' + oneIn(G.tierProb(1)) + ' / 4桁 ' + oneIn(G.tierProb(4)) + ' / 8桁 ' + oneIn(G.tierProb(8)) + ' / 12桁 ' + oneIn(G.tierProb(12)) + ' / 16桁 ' + oneIn(G.tierProb(16)) +
       '。同じ桁の数字はどれも同じ確率です(例: 1 は ' + oneIn(G.probExact(1)) + ')。最大値は ' + oneIn(G.probExact(MAX)) + '。';
   }
 
