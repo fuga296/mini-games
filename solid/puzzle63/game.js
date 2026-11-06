@@ -17,7 +17,8 @@
   let n, NN, grid, empty, moves, t0, tEnd, solvedFlag, playing;
   const viewer = Solid.createViewer($('stage'), {
     onTap: (x, y) => { const pos = pickPiece(x, y); if (pos >= 0) slidePiece(pos); },
-    claimDrag: (x, y) => { dragPos = pickPiece(x, y); return dragPos >= 0; },
+    // ピースの上で始めたドラッグでも、空きへ向かう向きに動かしたときだけスワイプ(=スライド)。それ以外は盤面の回転
+    claimDrag: (x, y, i, dx, dy) => { dragPos = pickPiece(x, y); if (dragPos < 0) return false; if (!slideDirOK(dragPos, dx, -dy)) { dragPos = -1; return false; } return true; },
     onClaimedDragEnd: (dx, dy, x, y, cancelled) => { if (!cancelled) swipePiece(dragPos, dx, -dy); dragPos = -1; }
   });
   let dragPos = -1;
@@ -132,6 +133,13 @@
     const c = P(empty); c[best.a] -= best.s; // 空きの「反対側」にあるピースが、その方向へ動いて空きに入る
     if (c[best.a] < 0 || c[best.a] >= n) { toast('その方向には動かせません'); return; }
     slidePiece(I(c[0], c[1], c[2]));
+  }
+  function slideDirOK(pos, sx, sy) { // pos のピースを空きへ動かす向きが、画面上で (sx,sy) とそろっているか
+    if (!onLine(pos) || Math.hypot(sx, sy) < 1) return false;
+    const a = P(pos), e = P(empty); let ax = 0; for (let i = 0; i < 3; i++) if (a[i] !== e[i]) ax = i;
+    const v = new T.Vector3(); v.setComponent(ax, Math.sign(e[ax] - a[ax]));
+    const w = viewer.axisOnScreen(v), L = Math.hypot(w.x, w.y);
+    return L > 0.2 && (w.x * sx + w.y * sy) / (L * Math.hypot(sx, sy)) > CONFIG.swipeMinDot;
   }
   function swipePiece(pos, sx, sy) {
     if (pos < 0 || Math.hypot(sx, sy) < 1) return;
