@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /*
  * 10年遊んだときの到達状況をモンテカルロで調べる (繰り上がり込み)。
- * 使い方: node num-gacha/tools/simulate.js [人数=2000] [1日の回数=10] [年数=10] [alpha]
+ * 使い方: node num-gacha/tools/simulate.js [人数=2000] [1日の回数=10] [年数=10] [桁ごとの倍率]
  * 実際のゲームと同じ logic.js の drawNumber / addNumber を使う。
  */
 'use strict';
@@ -10,7 +10,7 @@ var players = +process.argv[2] || 2000;
 var perDay = +process.argv[3] || 10;
 var years = +process.argv[4] || 10;
 var cfg = Object.assign({}, G.CONFIG);
-if (process.argv[5]) cfg.alpha = +process.argv[5];
+if (process.argv[5]) cfg.digitRatio = +process.argv[5];
 
 // 再現性のための軽い PRNG (xorshift32 を2本つないで 53bit に)
 function makeRng(seed) {
@@ -55,7 +55,7 @@ for (var p = 0; p < players; p++) {
 function median(a) { var s = a.slice().sort(function (x, y) { return x - y; }); return s[Math.floor(s.length / 2)]; }
 function mean(a) { return a.reduce(function (x, y) { return x + y; }, 0) / a.length; }
 
-console.log('alpha=' + cfg.alpha + ' 人数=' + players + ' 1日' + perDay + '回 (年' + pullsPerYear + '回)');
+console.log('桁ごとの倍率=' + cfg.digitRatio + ' 人数=' + players + ' 1日' + perDay + '回 (年' + pullsPerYear + '回)');
 console.log('| 年 | 累計回数 | 種類数(中央値) | 最大桁(中央値) | 16桁到達 | 最大値を引いた | 繰り上がり回数(平均) | 繰り上がりで届いた最大(中央値) |');
 console.log('|---|---|---|---|---|---|---|---|');
 yearStats.forEach(function (ys, idx) {

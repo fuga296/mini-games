@@ -71,8 +71,8 @@
       html += '<tr><td>' + rarityTag(r) + '</td><td>' + range + '</td><td class="r">' + oneIn(row.p) + '</td></tr>';
     });
     t.innerHTML = html;
-    $('ratenote').innerHTML = '1 が出る確率は ' + oneIn(G.probExact(1)) + '、2 は ' + oneIn(G.probExact(2)) + '、10 は ' + oneIn(G.probExact(10)) +
-      '。大きい数字ほど出にくくなります(P(n以上) = n<sup>−' + CFG.alpha + '</sup>)。';
+    $('ratenote').innerHTML = '桁が1つ増えるごとに、その桁が出る確率は約 ' + CFG.digitRatio + ' 倍になります。同じ桁の数字はどれも同じ確率です(1 は ' +
+      oneIn(G.probExact(1)) + '、10 は ' + oneIn(G.probExact(10)) + '、最大値は ' + oneIn(G.probExact(MAX)) + ')。';
   }
 
   // 背景に漂う数字
