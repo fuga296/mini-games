@@ -54,9 +54,10 @@
     var hours = [];
     for (var h = 0; h < 24; h += CFG.refreshHours) hours.push(h + ':00');
     $('note').innerHTML = '毎日 ' + hours.join(' / ') + ' に ' + CFG.pullsPerRefresh + ' 回に戻ります(貯まりません)<br>同じ数字が ' + CFG.carryThreshold + ' 枚そろうと、1つ上の数字に繰り上がり';
+    $('gstats').innerHTML = statsHtml();
     var rc = $('recent'); rc.innerHTML = '';
     if (!state.history.length) rc.appendChild(el('span', 'empty', 'まだありません'));
-    state.history.slice(0, 14).forEach(function (h) {
+    state.history.slice(0, isDesk() ? 24 : 14).forEach(function (h) {
       var r = rar(h.n), c = el('span', 'chip' + (r.rainbow ? ' rainbow-text' : ''), G.fmt(h.n));
       paint(c, r); rc.appendChild(c);
     });
@@ -71,8 +72,8 @@
       html += '<tr><td>' + rarityTag(r) + '</td><td>' + range + '</td><td class="r">' + oneIn(row.p) + '</td></tr>';
     });
     t.innerHTML = html;
-    $('ratenote').innerHTML = '桁が1つ増えるごとに、その桁が出る確率は約 ' + CFG.digitRatio + ' 倍になります。同じ桁の数字はどれも同じ確率です(1 は ' +
-      oneIn(G.probExact(1)) + '、10 は ' + oneIn(G.probExact(10)) + '、最大値は ' + oneIn(G.probExact(MAX)) + ')。';
+    $('ratenote').innerHTML = '桁ごとの確率: 1桁 ' + oneIn(G.tierProb(1)) + ' / 8桁 ' + oneIn(G.tierProb(8)) + ' / 12桁 ' + oneIn(G.tierProb(12)) + ' / 16桁 ' + oneIn(G.tierProb(16)) +
+      '。同じ桁の数字はどれも同じ確率です(例: 1 は ' + oneIn(G.probExact(1)) + ')。最大値は ' + oneIn(G.probExact(MAX)) + '。';
   }
 
   // 背景に漂う数字
@@ -272,17 +273,24 @@
   /* ===================== コレクション画面 ===================== */
   var view = (state.prefs && state.prefs.view) || UI.defaultView;
   var openFold = (state.prefs && state.prefs.open) || { 1: true };
+  var selDigit = (state.prefs && state.prefs.sel) || 1; // パソコン表示で選んでいる桁
+  var deskMq = window.matchMedia('(min-width: 960px) and (min-height: 560px)');
+  function isDesk() { return deskMq.matches; }
   var foldLimit = {};
   var zoomPath = []; // 例: [] = 全体, ['7'] = 7桁, ['7','3'] = 3xxxxxx, ...
 
-  function renderColl() {
-    var arr = unlocked();
+  function statsHtml(arr) {
+    arr = arr || unlocked();
     var best = arr.length ? arr[arr.length - 1] : 0;
-    $('stats').innerHTML =
-      '<div class="stat"><span>解放した数字</span><b>' + G.fmt(arr.length) + ' 種</b></div>' +
+    return '<div class="stat"><span>解放した数字</span><b>' + G.fmt(arr.length) + ' 種</b></div>' +
       '<div class="stat"><span>最大の数字</span><b>' + (best ? G.fmt(best) : '-') + '</b></div>' +
       '<div class="stat"><span>まわした回数</span><b>' + G.fmt(state.totalPulls) + '</b></div>' +
       '<div class="stat"><span>繰り上がり</span><b>' + G.fmt(state.totalCarries) + ' 回</b></div>';
+  }
+
+  function renderColl() {
+    var arr = unlocked();
+    $('stats').innerHTML = statsHtml(arr);
     var got = !!state.counts[String(MAX)], mr = G.rarityTable()[0].rarity, ms = $('maxslot');
     ms.className = 'maxslot ' + (got ? 'got' : 'locked');
     ms.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:4px">最大値 ' + rarityTag(mr) + '</div><div class="n' + (got ? ' rainbow-text' : '') + '">' + G.fmt(MAX) + '</div>' +
@@ -291,7 +299,7 @@
     $('viewhelp').textContent = view === 'fold'
       ? '桁ごとにまとめて表示。長く続く未解放は「未解放 n 個」の1行に省略します。'
       : '大きな範囲から10等分ずつ絞り込みます。x はまだ決まっていない桁です。';
-    var body = $('collbody'); body.innerHTML = '';
+    var body = $('collbody'); body.innerHTML = ''; $('tierlist').innerHTML = '';
     if (view === 'fold') renderFold(body, arr); else renderZoom(body, arr);
   }
 
@@ -313,47 +321,77 @@
     return g;
   }
 
+  /* d 桁のマス一覧 (未解放の長い連続は1行に省略) */
+  function tierGrid(d, arr) {
+    var rg = G.digitRange(d), lo = rg[0], hi = rg[1], total = hi - lo + 1;
+    var grid = el('div', 'grid');
+    if (total <= UI.fullGridMax) {
+      for (var n = lo; n <= hi; n++) grid.appendChild(cellFor(n, arr));
+      return grid;
+    }
+    var start = G.lowerBound(arr, lo), end = G.lowerBound(arr, hi + 1);
+    var limit = foldLimit[d] || UI.pageSize, shown = 0, prev = lo - 1;
+    for (var i = start; i < end && shown < limit; i++, shown++) {
+      var m = arr[i], gap = m - prev - 1;
+      if (gap > UI.gapCollapse) grid.appendChild(gapRow(prev + 1, m - 1));
+      else for (var x = prev + 1; x < m; x++) grid.appendChild(cellFor(x, arr));
+      grid.appendChild(cellFor(m, arr));
+      prev = m;
+    }
+    if (shown < end - start) {
+      var more = el('button', 'more', 'さらに表示(残り ' + G.fmt(end - start - shown) + ' 種)');
+      more.addEventListener('click', function () { foldLimit[d] = (foldLimit[d] || UI.pageSize) + UI.pageSize; renderColl(); });
+      grid.appendChild(more);
+    } else if (prev < hi) {
+      if (hi - prev > UI.gapCollapse) grid.appendChild(gapRow(prev + 1, hi));
+      else for (var y = prev + 1; y <= hi; y++) grid.appendChild(cellFor(y, arr));
+    }
+    return grid;
+  }
+
+  function tierInfo(d, arr) {
+    var rg = G.digitRange(d), lo = rg[0], hi = rg[1];
+    return { lo: lo, hi: hi, total: hi - lo + 1, got: G.countIn(arr, lo, hi), r: rar(lo) };
+  }
+
   function renderFold(body, arr) {
+    if (isDesk()) { renderFoldDesk(body, arr); return; }
     for (var d = 1; d <= 16; d++) (function (d) {
-      var rg = G.digitRange(d), lo = rg[0], hi = rg[1];
-      var total = hi - lo + 1, got = G.countIn(arr, lo, hi), r = rar(lo);
+      var t = tierInfo(d, arr), r = t.r;
       var f = el('div', 'fold' + (openFold[d] ? ' open' : ''));
       paint(f, r);
-      var pct = got / total * 100;
+      var pct = t.got / t.total * 100;
       var head = el('button');
       head.innerHTML = rarityTag(r) +
-        '<div><span class="ttl">' + d + '桁</span><span class="rng">' + G.fmt(lo) + ' 〜 ' + G.fmt(hi) + '</span>' +
-        '<div class="bar"><i style="width:' + (got ? Math.max(pct, 1.5) : 0) + '%"></i></div></div>' +
-        '<div class="cnt"><b>' + G.fmt(got) + '</b> / ' + bigCount(total) + ' <span class="chev">▶</span></div>';
+        '<div><span class="ttl">' + d + '桁</span><span class="rng">' + G.fmt(t.lo) + ' 〜 ' + G.fmt(t.hi) + '</span>' +
+        '<div class="bar"><i style="width:' + (t.got ? Math.max(pct, 1.5) : 0) + '%"></i></div></div>' +
+        '<div class="cnt"><b>' + G.fmt(t.got) + '</b> / ' + bigCount(t.total) + ' <span class="chev">▶</span></div>';
       head.addEventListener('click', function () { openFold[d] = !openFold[d]; savePrefs(); renderColl(); });
       f.appendChild(head);
-      if (openFold[d]) {
-        var b = el('div', 'body'), grid = el('div', 'grid');
-        b.appendChild(grid); f.appendChild(b);
-        if (total <= UI.fullGridMax) {
-          for (var n = lo; n <= hi; n++) grid.appendChild(cellFor(n, arr));
-        } else {
-          var start = G.lowerBound(arr, lo), end = G.lowerBound(arr, hi + 1);
-          var limit = foldLimit[d] || UI.pageSize, shown = 0, prev = lo - 1;
-          for (var i = start; i < end && shown < limit; i++, shown++) {
-            var m = arr[i], gap = m - prev - 1;
-            if (gap > UI.gapCollapse) grid.appendChild(gapRow(prev + 1, m - 1));
-            else for (var x = prev + 1; x < m; x++) grid.appendChild(cellFor(x, arr));
-            grid.appendChild(cellFor(m, arr));
-            prev = m;
-          }
-          if (shown < end - start) {
-            var more = el('button', 'more', 'さらに表示(残り ' + G.fmt(end - start - shown) + ' 種)');
-            more.addEventListener('click', function () { foldLimit[d] = (foldLimit[d] || UI.pageSize) + UI.pageSize; renderColl(); });
-            grid.appendChild(more);
-          } else if (prev < hi) {
-            if (hi - prev > UI.gapCollapse) grid.appendChild(gapRow(prev + 1, hi));
-            else for (var y = prev + 1; y <= hi; y++) grid.appendChild(cellFor(y, arr));
-          }
-        }
-      }
+      if (openFold[d]) { var b = el('div', 'body'); b.appendChild(tierGrid(d, arr)); f.appendChild(b); }
       body.appendChild(f);
     })(d);
+  }
+
+  /* パソコン: 左に16桁の一覧、右に選んだ桁の中身 */
+  function renderFoldDesk(body, arr) {
+    var list = $('tierlist'); list.innerHTML = '';
+    for (var d = 1; d <= 16; d++) (function (d) {
+      var t = tierInfo(d, arr), r = t.r;
+      var row = el('button', 'trow' + (d === selDigit ? ' sel' : ''));
+      paint(row, r);
+      row.innerHTML = rarityTag(r) + '<div class="t">' + d + '桁</div><div class="bar"><i style="width:' + (t.got ? Math.max(t.got / t.total * 100, 2) : 0) + '%"></i></div>' +
+        '<div class="cnt"><b>' + G.fmt(t.got) + '</b> / ' + bigCount(t.total) + '</div>';
+      row.addEventListener('click', function () { selDigit = d; savePrefs(); renderColl(); });
+      list.appendChild(row);
+    })(d);
+    var t2 = tierInfo(selDigit, arr);
+    var hd = el('div', 'tierhead');
+    paint(hd, t2.r);
+    hd.innerHTML = rarityTag(t2.r) + '<b>' + selDigit + '桁</b><span>' + G.fmt(t2.lo) + ' 〜 ' + G.fmt(t2.hi) + ' · 解放 ' + G.fmt(t2.got) + ' / ' + bigCount(t2.total) + ' · 1つあたり ' + oneIn(G.probExact(t2.lo)) + '</span>';
+    body.appendChild(hd);
+    body.appendChild(tierGrid(selDigit, arr));
+    var sel = list.querySelector('.sel'); if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest' });
   }
 
   /* 10進ズーム: パスから範囲と子の一覧を作る */
@@ -423,7 +461,7 @@
   document.querySelectorAll('#viewseg button').forEach(function (b) {
     b.addEventListener('click', function () { view = b.dataset.view; savePrefs(); renderColl(); });
   });
-  function savePrefs() { state.prefs = { view: view, open: openFold }; G.save(state); }
+  function savePrefs() { state.prefs = { view: view, open: openFold, sel: selDigit }; G.save(state); }
 
   /* 詳細 */
   var toastTimer = null;
@@ -452,11 +490,18 @@
   }
   $('tab-gacha').addEventListener('click', function () { showTab('gacha'); });
   $('tab-coll').addEventListener('click', function () { showTab('coll'); });
+  function onLayout() {
+    $('ratesbox').open = isDesk() ? true : $('ratesbox').open;
+    if (!$('screen-coll').hidden) renderColl(); else renderGacha();
+    if (playing) resizeFx();
+  }
+  if (deskMq.addEventListener) deskMq.addEventListener('change', onLayout); else deskMq.addListener(onLayout);
   document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
 
   /* 起動 */
   if (G.refresh(state, Date.now())) persist();
   renderRates();
+  $('ratesbox').open = isDesk();
   renderGacha();
   tick();
   setInterval(tick, 1000);
